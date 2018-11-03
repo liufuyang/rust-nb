@@ -6,6 +6,12 @@ A simple Naive Bayes Model in Rust
 
 WIP
 
+```rust
+fn main() {
+
+}
+```
+
 ## About Naive Bayes Model (and how to understand the code)
 
 Firstly let's take a look at the Bayes equations for only 2 classes and a feature
