@@ -1,5 +1,7 @@
 # rust-bn
 
+<a href="https://travis-ci.org/liufuyang/rust-nb"><img src="https://travis-ci.org/liufuyang/rust-nb.svg?branch=master"></a>
+
 A simple Naive Bayes Model in Rust
 
 ## How To Use
