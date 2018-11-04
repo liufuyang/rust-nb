@@ -57,14 +57,4 @@ mod tests {
         );
         assert_eq!(2, model_store.get_all_classes("test_model").unwrap().len());
     }
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-
-    #[test]
-    fn it_works_2() {
-        rust_nb::add()
-    }
 }
