@@ -14,13 +14,14 @@ pub struct Model<T: ModelStore> {
     model_store: T,
 }
 
-fn count(text: &str) -> HashMap<String, usize> {
-    let word_re = Regex::new(r"[a-z']+").unwrap();
+pub fn count(text: &str) -> HashMap<String, usize> {
+    let re = Regex::new(r"[^a-zA-Z]+").unwrap(); // only keep any kind of letter from any language, others become space
 
     let mut counts: HashMap<String, usize> = HashMap::new();
 
-    let line = text.to_lowercase();
-    let words: Vec<&str> = word_re.split(&line).collect();
+    let text = text.to_lowercase();
+    let text = re.replace_all(&text, " ");
+    let words: Vec<&str> = text.split(" ").collect();
 
     for word in words {
         *counts.entry(word.to_owned()).or_insert(0) += 1;
@@ -94,6 +95,10 @@ impl Model<ModelHashMapStore> {
         )
     }
 
+    pub fn get_store(&self) -> &ModelHashMapStore {
+        &self.model_store
+    }
+
     pub fn predict(
         &self,
         model_name: &str,
@@ -113,7 +118,6 @@ impl Model<ModelHashMapStore> {
             let tmp_hash_set = HashSet::new();
 
             for feature in features {
-                println!("111111----->{:?}", feature);
                 let known_features_in_table = match self
                     .model_store
                     .get_appeared_words(model_name, &feature.name)
@@ -132,6 +136,7 @@ impl Model<ModelHashMapStore> {
                     let word_counts_for_current_feature = count(&feature.value);
                     let current_words_set: HashSet<String> =
                         word_counts_for_current_feature.keys().cloned().collect();
+
                     let known_words: HashSet<&String> = current_words_set
                         .intersection(&known_features_in_table)
                         .collect();
@@ -141,9 +146,6 @@ impl Model<ModelHashMapStore> {
                             Some(v) => *v,
                             None => 0,
                         };
-
-                        println!("------>word:{}", word);
-                        println!("------>count:{}", count);
 
                         lp += self.cal_log_prob(
                             model_name,
@@ -175,8 +177,7 @@ impl Model<ModelHashMapStore> {
             result.insert(outcome.to_owned(), final_log_p);
         }
 
-        // Some(normalize(result))
-        Some(result)
+        Some(normalize(result))
     }
 
     pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
@@ -266,6 +267,7 @@ pub trait ModelStore {
 }
 
 // A in memory ModelStore implementation ModelHashMapStore
+#[derive(Debug)]
 pub struct ModelHashMapStore {
     map: HashMap<String, usize>,
     class_map: HashMap<String, HashSet<String>>, // model_name to list of class
@@ -384,7 +386,7 @@ impl ModelStore for ModelHashMapStore {
         feature_name: &str,
         c: &str,
     ) -> usize {
-        let key = format!("{}|%{}%|%{}%", model_name, feature_name, c);
+        let key = format!("{}|%{}%|%{}", model_name, feature_name, c);
         *self
             .words_in_class_count_map
             .get(&key)
@@ -393,6 +395,6 @@ impl ModelStore for ModelHashMapStore {
 
     fn get_appeared_words(&self, model_name: &str, feature_name: &str) -> Option<&HashSet<String>> {
         self.words_appeared_map
-            .get(&format!("{}|%{}%", model_name, feature_name))
+            .get(&format!("{}|%{}", model_name, feature_name))
     }
 }

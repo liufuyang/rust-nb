@@ -4,6 +4,49 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn model_works_simple_case() {
+        let mut model = Model::new();
+
+        let input_train = vec![
+            (
+                "happy".to_owned(),
+                vec![Feature {
+                    is_text: true,
+                    name: "my_words".to_owned(),
+                    value: "good".to_owned(),
+                }],
+            ),
+            (
+                "sad".to_owned(),
+                vec![Feature {
+                    is_text: true,
+                    name: "my_words".to_owned(),
+                    value: "bad".to_owned(),
+                }],
+            ),
+        ];
+        model.train("test_model", input_train);
+
+        let input_test = vec![Feature {
+            is_text: true,
+            name: "my_words".to_owned(),
+            value: "no opinion".to_owned(),
+        }];
+        let result = model.predict("test_model", &input_test).unwrap();
+        assert_eq!(0.5, *result.get("happy").unwrap());
+        assert_eq!(0.5, *result.get("sad").unwrap());
+
+        let input_test = vec![Feature {
+            is_text: true,
+            name: "my_words".to_owned(),
+            value: "GOOD".to_owned(),
+        }];
+        let result = model.predict("test_model", &input_test).unwrap();
+        assert!((0.6666666666666666 - *result.get("happy").unwrap()).abs() < 1e-10);
+        assert!((0.3333333333333333 - *result.get("sad").unwrap()).abs() < 1e-10);
+    }
+
+    #[test]
     fn model_works() {
         let mut model = Model::new();
 
@@ -21,7 +64,7 @@ mod tests {
                 vec![Feature {
                     is_text: true,
                     name: "my_words".to_owned(),
-                    value: "The food tastes so bad".to_owned(),
+                    value: "that food tastes so bad".to_owned(),
                 }],
             ),
         ];
@@ -30,11 +73,12 @@ mod tests {
         let input_test = vec![Feature {
             is_text: true,
             name: "my_words".to_owned(),
-            value: "The weather is so good".to_owned(),
+            value: "thinking about the weather ...".to_owned(),
         }];
-        let result = model.predict("test_model", &input_test);
+        let result = model.predict("test_model", &input_test).unwrap();
 
-        println!(">>>>>>>>>>>>>>>>result: {:?}", result);
+        assert!((0.8 - *result.get("happy").unwrap()).abs() < 1e-10);
+        assert!((0.2 - *result.get("sad").unwrap()).abs() < 1e-10);
     }
 
     #[test]
@@ -49,13 +93,19 @@ mod tests {
     }
 
     #[test]
+    fn count_works() {
+        // println!("count -------> {:?}", rust_nb::count("This is good good"));
+    }
+
+    #[test]
     fn normalize_works() {
         let mut map = HashMap::new();
         map.insert("a".to_owned(), 1.0);
         map.insert("b".to_owned(), 5.0);
 
         let map = rust_nb::normalize(map);
-        println!("{:?}", map);
+        assert_eq!(0.017986209962091555, *map.get("a").unwrap());
+        assert_eq!(0.9820137900379085, *map.get("b").unwrap());
     }
 
     #[test]
