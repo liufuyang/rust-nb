@@ -67,7 +67,7 @@ or
 
 <a href="https://www.codecogs.com/eqnedit.php?latex=log(p(c_n&space;|&space;X))&space;<=&space;log(&space;p(c_n))&space;&plus;&space;\:&space;\sum_{i}&space;t_i&space;log(p(x_i|&space;c_n))" target="_blank"><img src="https://latex.codecogs.com/gif.latex?log(p(c_n&space;|&space;X))&space;<=&space;log(&space;p(c_n))&space;&plus;&space;\:&space;\sum_{i}&space;t_i&space;log(p(x_i|&space;c_n))" title="log(p(c_n | X)) <= log( p(c_n)) + \: \sum_{i} t_i log(p(x_i| c_n))" /></a>
 
-To calculate the priors `p(c_n|X)` and conditional probabilities `p(x_i| c_n)`:
+To calculate the priors `p(c_n)` and conditional probabilities `p(x_i| c_n)`:
 
 <a href="https://www.codecogs.com/eqnedit.php?latex=p(c_n)&space;=&space;\frac{N_{c_n}}{N}&space;,\:&space;\:&space;p(x_i|&space;c_n)&space;=&space;\frac{count(x_i,&space;c_n)&space;&plus;&space;\epsilon&space;}{count(c_n)&space;&plus;&space;|V|&space;*&space;\epsilon&space;}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?p(c_n)&space;=&space;\frac{N_{c_n}}{N}&space;,\:&space;\:&space;p(x_i|&space;c_n)&space;=&space;\frac{count(x_i,&space;c_n)&space;&plus;&space;\epsilon&space;}{count(c_n)&space;&plus;&space;|V|&space;*&space;\epsilon&space;}" title="p(c_n) = \frac{N_{c_n}}{N} ,\: \: p(x_i| c_n) = \frac{count(x_i, c_n) + \epsilon }{count(c_n) + |V| * \epsilon }" /></a>
 
