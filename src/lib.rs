@@ -1,11 +1,11 @@
+extern crate regex;
+
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
-pub struct Category {
-    pub name: String,
-    pub value: String,
-}
-
-pub struct Text {
+#[derive(Debug)]
+pub struct Feature {
+    pub is_text: bool, // text or category
     pub name: String,
     pub value: String,
 }
@@ -14,10 +14,212 @@ pub struct Model<T: ModelStore> {
     model_store: T,
 }
 
+fn count(text: &str) -> HashMap<String, usize> {
+    let word_re = Regex::new(r"[a-z']+").unwrap();
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    let line = text.to_lowercase();
+    let words: Vec<&str> = word_re.split(&line).collect();
+
+    for word in words {
+        *counts.entry(word.to_owned()).or_insert(0) += 1;
+    }
+
+    return counts;
+}
+
+pub fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
+    let max = &predictions
+        .values()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap()
+        .clone();
+
+    for (_, v) in &mut predictions {
+        *v = (*v - max).exp();
+    }
+
+    let norm: f64 = predictions.values().sum();
+
+    for (_, v) in &mut predictions {
+        *v = *v / norm;
+    }
+
+    predictions
+}
+
+pub fn log_prob(count: usize, c_f_c: usize, c_c: usize, num_of_unique_word: usize) -> f64 {
+    let pseudo_count = 1.0;
+
+    let count = count as f64;
+    let c_f_c = c_f_c as f64;
+    let c_c = c_c as f64;
+    let num_of_unique_word = num_of_unique_word as f64;
+
+    count * ((c_f_c + pseudo_count).ln() - (c_c + num_of_unique_word * pseudo_count).ln())
+}
+
 impl Model<ModelHashMapStore> {
     pub fn new() -> Model<ModelHashMapStore> {
         Model::<ModelHashMapStore> {
             model_store: ModelHashMapStore::new(),
+        }
+    }
+
+    pub fn new_large() -> Model<ModelHashMapStore> {
+        Model::<ModelHashMapStore> {
+            model_store: ModelHashMapStore::new_large(),
+        }
+    }
+
+    fn cal_log_prob(
+        &self,
+        model_name: &str,
+        feature_name: &str,
+        outcome: &str,
+        count_of_unique_word: usize,
+        count_of_all_word_in_class: usize,
+        count_of_word: usize,
+        word: &str,
+    ) -> f64 {
+        let count_of_word_in_class =
+            self.model_store
+                .get_count_of_word_in_class(model_name, feature_name, outcome, word);
+        log_prob(
+            count_of_word,
+            count_of_word_in_class,
+            count_of_all_word_in_class,
+            count_of_unique_word,
+        )
+    }
+
+    pub fn predict(
+        &self,
+        model_name: &str,
+        features: &Vec<Feature>,
+    ) -> Option<HashMap<String, f64>> {
+        let mut result = HashMap::new();
+
+        let outcomes = self.model_store.get_all_classes(model_name)?;
+
+        for outcome in outcomes {
+            let priors_count_of_class = self
+                .model_store
+                .get_priors_count_of_class(model_name, outcome);
+            let total_data_count = self.model_store.get_total_data_count(model_name);
+
+            let mut lp = 0.0;
+            let tmp_hash_set = HashSet::new();
+
+            for feature in features {
+                println!("111111----->{:?}", feature);
+                let known_features_in_table = match self
+                    .model_store
+                    .get_appeared_words(model_name, &feature.name)
+                {
+                    Some(set) => set,
+                    None => &tmp_hash_set,
+                };
+                let count_of_unique_word = known_features_in_table.len();
+                let count_of_all_word_in_class = self.model_store.get_count_of_all_word_in_class(
+                    model_name,
+                    &feature.name,
+                    &outcome,
+                );
+
+                if feature.is_text {
+                    let word_counts_for_current_feature = count(&feature.value);
+                    let current_words_set: HashSet<String> =
+                        word_counts_for_current_feature.keys().cloned().collect();
+                    let known_words: HashSet<&String> = current_words_set
+                        .intersection(&known_features_in_table)
+                        .collect();
+
+                    for word in known_words {
+                        let count = match word_counts_for_current_feature.get(word) {
+                            Some(v) => *v,
+                            None => 0,
+                        };
+
+                        println!("------>word:{}", word);
+                        println!("------>count:{}", count);
+
+                        lp += self.cal_log_prob(
+                            model_name,
+                            &feature.name,
+                            outcome,
+                            count_of_unique_word,
+                            count_of_all_word_in_class,
+                            count,
+                            word,
+                        )
+                    }
+                } else {
+                    if known_features_in_table.contains(&feature.value) {
+                        lp += self.cal_log_prob(
+                            model_name,
+                            &feature.name,
+                            outcome,
+                            count_of_unique_word,
+                            count_of_all_word_in_class,
+                            1,
+                            &feature.value,
+                        )
+                    }
+                }
+            }
+
+            let final_log_p =
+                (priors_count_of_class as f64).ln() - (total_data_count as f64).ln() + lp;
+            result.insert(outcome.to_owned(), final_log_p);
+        }
+
+        // Some(normalize(result))
+        Some(result)
+    }
+
+    pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
+        for (outcome, features) in outcome_feature_pairs {
+            for feature in features {
+                self.model_store
+                    .add_to_priors_count_of_class(model_name, &outcome, 1);
+                self.model_store.add_to_total_data_count(model_name, 1);
+
+                if feature.is_text {
+                    let word_counts = count(&feature.value);
+                    for (word, count) in word_counts {
+                        self.model_store.add_to_count_of_word_in_class(
+                            model_name,
+                            &feature.name,
+                            &outcome,
+                            &word,
+                            count,
+                        );
+
+                        self.model_store.add_to_count_of_all_word_in_class(
+                            model_name,
+                            &feature.name,
+                            &outcome,
+                            count,
+                        )
+                    }
+                } else {
+                    self.model_store.add_to_count_of_word_in_class(
+                        model_name,
+                        &feature.name,
+                        &outcome,
+                        &feature.value,
+                        1,
+                    );
+                    self.model_store.add_to_count_of_all_word_in_class(
+                        model_name,
+                        &feature.name,
+                        &outcome,
+                        1,
+                    )
+                }
+            }
         }
     }
 }

@@ -1,7 +1,41 @@
 #[cfg(test)]
 mod tests {
-    use rust_nb::{Model, ModelHashMapStore, ModelStore};
+    use rust_nb::{Feature, Model, ModelHashMapStore, ModelStore};
     use std::collections::HashMap;
+
+    #[test]
+    fn model_works() {
+        let mut model = Model::new();
+
+        let input_train = vec![
+            (
+                "happy".to_owned(),
+                vec![Feature {
+                    is_text: true,
+                    name: "my_words".to_owned(),
+                    value: "The weather is so good".to_owned(),
+                }],
+            ),
+            (
+                "sad".to_owned(),
+                vec![Feature {
+                    is_text: true,
+                    name: "my_words".to_owned(),
+                    value: "The food tastes so bad".to_owned(),
+                }],
+            ),
+        ];
+        model.train("test_model", input_train);
+
+        let input_test = vec![Feature {
+            is_text: true,
+            name: "my_words".to_owned(),
+            value: "The weather is so good".to_owned(),
+        }];
+        let result = model.predict("test_model", &input_test);
+
+        println!(">>>>>>>>>>>>>>>>result: {:?}", result);
+    }
 
     #[test]
     fn model_hashmap_store_works() {
@@ -12,6 +46,16 @@ mod tests {
         assert_eq!(1, model_store.get_total_data_count("test_model"));
         model_store.add_to_total_data_count("test_model", 10);
         assert_eq!(11, model_store.get_total_data_count("test_model"));
+    }
+
+    #[test]
+    fn normalize_works() {
+        let mut map = HashMap::new();
+        map.insert("a".to_owned(), 1.0);
+        map.insert("b".to_owned(), 5.0);
+
+        let map = rust_nb::normalize(map);
+        println!("{:?}", map);
     }
 
     #[test]
