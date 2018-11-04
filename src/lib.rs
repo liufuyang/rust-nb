@@ -14,53 +14,6 @@ pub struct Model<T: ModelStore> {
     model_store: T,
 }
 
-pub fn count(text: &str) -> HashMap<String, usize> {
-    let re = Regex::new(r"[^a-zA-Z]+").unwrap(); // only keep any kind of letter from any language, others become space
-
-    let mut counts: HashMap<String, usize> = HashMap::new();
-
-    let text = text.to_lowercase();
-    let text = re.replace_all(&text, " ");
-    let words: Vec<&str> = text.split(" ").collect();
-
-    for word in words {
-        *counts.entry(word.to_owned()).or_insert(0) += 1;
-    }
-
-    return counts;
-}
-
-pub fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
-    let max = &predictions
-        .values()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap()
-        .clone();
-
-    for (_, v) in &mut predictions {
-        *v = (*v - max).exp();
-    }
-
-    let norm: f64 = predictions.values().sum();
-
-    for (_, v) in &mut predictions {
-        *v = *v / norm;
-    }
-
-    predictions
-}
-
-pub fn log_prob(count: usize, c_f_c: usize, c_c: usize, num_of_unique_word: usize) -> f64 {
-    let pseudo_count = 1.0;
-
-    let count = count as f64;
-    let c_f_c = c_f_c as f64;
-    let c_c = c_c as f64;
-    let num_of_unique_word = num_of_unique_word as f64;
-
-    count * ((c_f_c + pseudo_count).ln() - (c_c + num_of_unique_word * pseudo_count).ln())
-}
-
 impl Model<ModelHashMapStore> {
     pub fn new() -> Model<ModelHashMapStore> {
         Model::<ModelHashMapStore> {
@@ -397,4 +350,73 @@ impl ModelStore for ModelHashMapStore {
         self.words_appeared_map
             .get(&format!("{}|%{}", model_name, feature_name))
     }
+}
+
+///
+/// private functions
+///
+fn count(text: &str) -> HashMap<String, usize> {
+    let re = Regex::new(r"[^a-zA-Z]+").unwrap(); // only keep any kind of letter from any language, others become space
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    let text = text.to_lowercase();
+    let text = re.replace_all(&text, " ");
+    let words: Vec<&str> = text.split(" ").collect();
+
+    for word in words {
+        *counts.entry(word.to_owned()).or_insert(0) += 1;
+    }
+
+    return counts;
+}
+
+fn log_prob(count: usize, c_f_c: usize, c_c: usize, num_of_unique_word: usize) -> f64 {
+    let pseudo_count = 1.0;
+
+    let count = count as f64;
+    let c_f_c = c_f_c as f64;
+    let c_c = c_c as f64;
+    let num_of_unique_word = num_of_unique_word as f64;
+
+    count * ((c_f_c + pseudo_count).ln() - (c_c + num_of_unique_word * pseudo_count).ln())
+}
+
+fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
+    let max = &predictions
+        .values()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap()
+        .clone();
+
+    for (_, v) in &mut predictions {
+        *v = (*v - max).exp();
+    }
+
+    let norm: f64 = predictions.values().sum();
+
+    for (_, v) in &mut predictions {
+        *v = *v / norm;
+    }
+
+    predictions
+}
+
+///
+///
+///
+#[test]
+fn count_works() {
+    // println!("count -------> {:?}", rust_nb::count("This is good good"));
+}
+
+#[test]
+fn normalize_works() {
+    let mut map = HashMap::new();
+    map.insert("a".to_owned(), 1.0);
+    map.insert("b".to_owned(), 5.0);
+
+    let map = normalize(map);
+    assert_eq!(0.017986209962091555, *map.get("a").unwrap());
+    assert_eq!(0.9820137900379085, *map.get("b").unwrap());
 }

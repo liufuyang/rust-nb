@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod rust_nb {
     use rust_nb::{Feature, Model, ModelHashMapStore, ModelStore};
     use std::collections::HashMap;
 
@@ -90,22 +90,6 @@ mod tests {
         assert_eq!(1, model_store.get_total_data_count("test_model"));
         model_store.add_to_total_data_count("test_model", 10);
         assert_eq!(11, model_store.get_total_data_count("test_model"));
-    }
-
-    #[test]
-    fn count_works() {
-        // println!("count -------> {:?}", rust_nb::count("This is good good"));
-    }
-
-    #[test]
-    fn normalize_works() {
-        let mut map = HashMap::new();
-        map.insert("a".to_owned(), 1.0);
-        map.insert("b".to_owned(), 5.0);
-
-        let map = rust_nb::normalize(map);
-        assert_eq!(0.017986209962091555, *map.get("a").unwrap());
-        assert_eq!(0.9820137900379085, *map.get("b").unwrap());
     }
 
     #[test]
