@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod test_20_newsgroup {
-    use rust_nb::{Model, ModelHashMapStore, ModelStore};
-    use std::collections::HashMap;
+    use rust_nb::{ModelHashMapStore, ModelStore};
 
     #[test]
     fn model_hashmap_store_works() {

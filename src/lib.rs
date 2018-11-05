@@ -14,19 +14,7 @@ pub struct Model<T: ModelStore> {
     model_store: T,
 }
 
-impl Model<ModelHashMapStore> {
-    pub fn new() -> Model<ModelHashMapStore> {
-        Model::<ModelHashMapStore> {
-            model_store: ModelHashMapStore::new(),
-        }
-    }
-
-    pub fn new_large() -> Model<ModelHashMapStore> {
-        Model::<ModelHashMapStore> {
-            model_store: ModelHashMapStore::new_large(),
-        }
-    }
-
+impl<T: ModelStore> Model<T> {
     fn cal_log_prob(
         &self,
         model_name: &str,
@@ -46,10 +34,6 @@ impl Model<ModelHashMapStore> {
             count_of_all_word_in_class,
             count_of_unique_word,
         )
-    }
-
-    pub fn get_store(&self) -> &ModelHashMapStore {
-        &self.model_store
     }
 
     pub fn predict(
@@ -220,6 +204,7 @@ pub trait ModelStore {
 }
 
 // A in memory ModelStore implementation ModelHashMapStore
+
 #[derive(Debug)]
 pub struct ModelHashMapStore {
     map: HashMap<String, usize>,
@@ -227,6 +212,24 @@ pub struct ModelHashMapStore {
     words_appeared_map: HashMap<String, HashSet<String>>, // model_name|feature_name to list of appeared words
     word_count_map: HashMap<String, usize>, // a very large hash map for look up word counts
     words_in_class_count_map: HashMap<String, usize>, // a hash map for look up word counts for each feature and class
+}
+
+impl Model<ModelHashMapStore> {
+    pub fn new() -> Model<ModelHashMapStore> {
+        Model::<ModelHashMapStore> {
+            model_store: ModelHashMapStore::new(),
+        }
+    }
+
+    pub fn new_large() -> Model<ModelHashMapStore> {
+        Model::<ModelHashMapStore> {
+            model_store: ModelHashMapStore::new_large(),
+        }
+    }
+
+    pub fn get_store(&self) -> &ModelHashMapStore {
+        &self.model_store
+    }
 }
 
 impl ModelHashMapStore {
@@ -353,7 +356,7 @@ impl ModelStore for ModelHashMapStore {
 }
 
 ///
-/// private functions
+/// private util functions
 ///
 fn count(text: &str) -> HashMap<String, usize> {
     let re = Regex::new(r"[^a-zA-Z]+").unwrap(); // only keep any kind of letter from any language, others become space
@@ -407,7 +410,11 @@ fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
 ///
 #[test]
 fn count_works() {
-    // println!("count -------> {:?}", rust_nb::count("This is good good"));
+    let result = count("This is good good ... Rust rust RUST");
+    assert_eq!(2, result["good"]);
+    assert_eq!(1, result["this"]);
+    assert_eq!(1, result["is"]);
+    assert_eq!(3, result["rust"]);
 }
 
 #[test]

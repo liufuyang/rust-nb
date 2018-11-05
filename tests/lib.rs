@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod rust_nb {
     use rust_nb::{Feature, Model, ModelHashMapStore, ModelStore};
-    use std::collections::HashMap;
 
     #[test]
     fn model_works_simple_case() {
@@ -26,6 +25,7 @@ mod rust_nb {
             ),
         ];
         model.train("test_model", input_train);
+        // println!("{:?}", model.get_store());
 
         let input_test = vec![Feature {
             is_text: true,
