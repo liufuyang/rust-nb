@@ -16,6 +16,7 @@ pub struct Feature {
 
 pub struct Model<T: ModelStore> {
     model_store: T,
+    regex: Regex,
 }
 
 impl<T: ModelStore> Model<T> {
@@ -74,7 +75,7 @@ impl<T: ModelStore> Model<T> {
                 );
 
                 if feature.is_text {
-                    let word_counts_for_current_feature = count(&feature.value);
+                    let word_counts_for_current_feature = count(&feature.value, &self.regex);
                     let current_words_set: HashSet<String> =
                         word_counts_for_current_feature.keys().cloned().collect();
 
@@ -122,14 +123,19 @@ impl<T: ModelStore> Model<T> {
     }
 
     pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
+        let mut c = 0;
+
         for (outcome, features) in outcome_feature_pairs {
+            c += 1;
+            println!("{}", c);
+
             for feature in features {
                 self.model_store
                     .add_to_priors_count_of_class(model_name, &outcome, 1);
                 self.model_store.add_to_total_data_count(model_name, 1);
 
                 if feature.is_text {
-                    let word_counts = count(&feature.value);
+                    let word_counts = count(&feature.value, &self.regex);
                     for (word, count) in word_counts {
                         self.model_store.add_to_count_of_word_in_class(
                             model_name,
@@ -222,12 +228,14 @@ impl Model<ModelHashMapStore> {
     pub fn new() -> Model<ModelHashMapStore> {
         Model::<ModelHashMapStore> {
             model_store: ModelHashMapStore::new(),
+            regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
         }
     }
 
     pub fn new_large() -> Model<ModelHashMapStore> {
         Model::<ModelHashMapStore> {
             model_store: ModelHashMapStore::new_large(),
+            regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
         }
     }
 
@@ -362,19 +370,23 @@ impl ModelStore for ModelHashMapStore {
 ///
 /// private util functions
 ///
-fn count(text: &str) -> HashMap<String, usize> {
-    let re = Regex::new(r"[^a-zA-Z]+").unwrap(); // only keep any kind of letter from any language, others become space
+fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
+    let text = text.to_lowercase();
+    let text = regex.replace_all(&text, " ");
+
+    let words = text.split(" ");
+
+    // words.iter().fold(HashMap::new(), |mut acc, w| {
+    //     *acc.entry(w.to_string()).or_insert(0) += 1; // seems a slow operation?
+    //     acc
+    // })
 
     let mut counts: HashMap<String, usize> = HashMap::new();
-
-    let text = text.to_lowercase();
-    let text = re.replace_all(&text, " ");
-    let words: Vec<&str> = text.split(" ").collect();
-
     for word in words {
         *counts.entry(word.to_owned()).or_insert(0) += 1;
     }
-
+    // TODO: delete later
+    // counts.insert("good".to_owned(), 1);
     return counts;
 }
 
@@ -414,7 +426,8 @@ fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
 ///
 #[test]
 fn count_works() {
-    let result = count("This is good good ... Rust rust RUST");
+    let regex = Regex::new(r"[^a-zA-Z]+").unwrap();
+    let result = count("This is good good ... Rust rust RUST", &regex);
     assert_eq!(2, result["good"]);
     assert_eq!(1, result["this"]);
     assert_eq!(1, result["is"]);
