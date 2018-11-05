@@ -61,7 +61,7 @@ impl<T: ModelStore> Model<T> {
                 let count_of_unique_word = known_features_in_table.len();
                 let count_of_all_word_in_class = self
                     .model_store
-                    .get_count_of_all_word_in_class(&feature.name, &outcome);
+                    .get_count_of_all_word_in_class(&feature.name, outcome);
 
                 if feature.is_text {
                     let word_counts_for_current_feature = count(&feature.value, &self.regex);
@@ -69,7 +69,7 @@ impl<T: ModelStore> Model<T> {
                         word_counts_for_current_feature.keys().cloned().collect();
 
                     let known_words: HashSet<&String> = current_words_set
-                        .intersection(&known_features_in_table)
+                        .intersection(known_features_in_table)
                         .collect();
 
                     for word in known_words {
@@ -84,7 +84,7 @@ impl<T: ModelStore> Model<T> {
                             count_of_unique_word,
                             count_of_all_word_in_class,
                             count,
-                            word,
+                            &word,
                         )
                     }
                 } else {
@@ -172,9 +172,10 @@ pub trait ModelStore {
 
 #[derive(Debug)]
 pub struct ModelHashMapStore {
+    words_appeared_map: HashMap<String, HashSet<String>>, // for |V|, use feature_name to get list of appeared words
+
     map: HashMap<String, usize>,
-    class_map: HashSet<String>, // set list of class
-    words_appeared_map: HashMap<String, HashSet<String>>, // feature_name to list of appeared words
+    class_set: HashSet<String>,                       // set list of class
     word_count_map: HashMap<String, usize>, // a very large hash map for look up word counts
     words_in_class_count_map: HashMap<String, usize>, // a hash map for look up word counts for each feature and class
 }
@@ -203,7 +204,7 @@ impl ModelHashMapStore {
     pub fn new() -> ModelHashMapStore {
         ModelHashMapStore {
             map: HashMap::new(),
-            class_map: HashSet::new(),
+            class_set: HashSet::new(),
             words_appeared_map: HashMap::new(),
             word_count_map: HashMap::new(),
             words_in_class_count_map: HashMap::new(),
@@ -213,7 +214,7 @@ impl ModelHashMapStore {
     pub fn new_large() -> ModelHashMapStore {
         ModelHashMapStore {
             map: HashMap::with_capacity(1024),
-            class_map: HashSet::with_capacity(1024),
+            class_set: HashSet::with_capacity(1024),
             words_appeared_map: HashMap::with_capacity(32),
             word_count_map: HashMap::with_capacity(262_144), // 2^18
             words_in_class_count_map: HashMap::with_capacity(1024),
@@ -231,29 +232,34 @@ impl ModelHashMapStore {
 }
 
 impl ModelStore for ModelHashMapStore {
+    fn get_all_classes(&self) -> &HashSet<String> {
+        &self.class_set
+    }
+
+    fn get_appeared_words(&self, feature_name: &str) -> Option<&HashSet<String>> {
+        self.words_appeared_map.get(feature_name)
+    }
+
+    // N_cn
     fn add_to_priors_count_of_class(&mut self, c: &str, v: usize) {
         self.map_add(&format!("priors_count_of_class|%{}", c), v);
 
-        // add class to class_map
-        self.class_map.insert(c.to_string());
+        // add class to class_set
+        self.class_set.insert(c.to_string());
     }
-
     fn get_priors_count_of_class(&self, c: &str) -> usize {
         self.map_get(&format!("priors_count_of_class|%{}", c))
     }
 
-    fn get_all_classes(&self) -> &HashSet<String> {
-        &self.class_map
-    }
-
+    // N
     fn add_to_total_data_count(&mut self, v: usize) {
         self.map_add("total_data_count", v);
     }
-
     fn get_total_data_count(&self) -> usize {
         self.map_get("total_data_count")
     }
 
+    // count(x_i, c_n)
     fn add_to_count_of_word_in_class(&mut self, feature_name: &str, c: &str, word: &str, v: usize) {
         let key = format!("{}%|%{}%|%{}", feature_name, c, word);
         let word_count = self.word_count_map.entry(key).or_insert(0);
@@ -266,28 +272,23 @@ impl ModelStore for ModelHashMapStore {
             .or_insert(HashSet::with_capacity(262_144)); // 2^18
         word_set.insert(word.to_string());
     }
-
     fn get_count_of_word_in_class(&self, feature_name: &str, c: &str, word: &str) -> usize {
         let key = format!("{}%|%{}%|%{}", feature_name, c, word);
         *self.word_count_map.get(&key).unwrap_or_else(|| &0)
     }
 
+    // count(c_n)
     fn add_to_count_of_all_word_in_class(&mut self, feature_name: &str, c: &str, v: usize) {
         let key = format!("{}%|%{}", feature_name, c);
         let words_count = self.words_in_class_count_map.entry(key).or_insert(0);
         *words_count += v;
     }
-
     fn get_count_of_all_word_in_class(&self, feature_name: &str, c: &str) -> usize {
         let key = format!("{}%|%{}", feature_name, c);
         *self
             .words_in_class_count_map
             .get(&key)
             .unwrap_or_else(|| &0)
-    }
-
-    fn get_appeared_words(&self, feature_name: &str) -> Option<&HashSet<String>> {
-        self.words_appeared_map.get(feature_name)
     }
 }
 

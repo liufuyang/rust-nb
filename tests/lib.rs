@@ -42,6 +42,7 @@ mod rust_nb {
             value: "GOOD".to_owned(),
         }];
         let result = model.predict(&input_test).unwrap();
+        // println!("------------------------------> result: {:?}", result);
         assert!((0.6666666666666666 - *result.get("happy").unwrap()).abs() < 1e-10);
         assert!((0.3333333333333333 - *result.get("sad").unwrap()).abs() < 1e-10);
     }
