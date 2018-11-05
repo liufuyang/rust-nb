@@ -3,9 +3,13 @@ extern crate regex;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
+///
 #[derive(Debug)]
 pub struct Feature {
-    pub is_text: bool, // text or category
+    // setting `is_text` as true will considering this feature as a multinomial feature and do word counting on feature.value.
+    // setting `is_text` as true will considering this feature as categorical feature and will use feature.value as whole word with count 1
+    pub is_text: bool,
+
     pub name: String,
     pub value: String,
 }
