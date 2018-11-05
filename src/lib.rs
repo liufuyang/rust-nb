@@ -1,4 +1,7 @@
+extern crate rayon;
 extern crate regex;
+
+use rayon::prelude::*;
 
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -110,44 +113,46 @@ impl<T: ModelStore> Model<T> {
     }
 
     pub fn train(&mut self, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
-        let mut c = 0;
+        outcome_feature_pairs
+            .iter()
+            .for_each(|(outcome, features)| {
+                for feature in features {
+                    self.model_store.add_to_priors_count_of_class(&outcome, 1);
+                    self.model_store.add_to_total_data_count(1);
 
-        for (outcome, features) in outcome_feature_pairs {
-            c += 1;
-            println!("{}", c);
+                    if feature.is_text {
+                        let word_counts = count(&feature.value, &self.regex);
+                        for (word, count) in word_counts {
+                            self.model_store.add_to_count_of_word_in_class(
+                                &feature.name,
+                                &outcome,
+                                &word,
+                                count,
+                            );
 
-            for feature in features {
-                self.model_store.add_to_priors_count_of_class(&outcome, 1);
-                self.model_store.add_to_total_data_count(1);
-
-                if feature.is_text {
-                    let word_counts = count(&feature.value, &self.regex);
-                    for (word, count) in word_counts {
+                            self.model_store.add_to_count_of_all_word_in_class(
+                                &feature.name,
+                                &outcome,
+                                count,
+                            )
+                        }
+                    } else {
                         self.model_store.add_to_count_of_word_in_class(
                             &feature.name,
                             &outcome,
-                            &word,
-                            count,
+                            &feature.value,
+                            1,
                         );
-
                         self.model_store.add_to_count_of_all_word_in_class(
                             &feature.name,
                             &outcome,
-                            count,
+                            1,
                         )
                     }
-                } else {
-                    self.model_store.add_to_count_of_word_in_class(
-                        &feature.name,
-                        &outcome,
-                        &feature.value,
-                        1,
-                    );
-                    self.model_store
-                        .add_to_count_of_all_word_in_class(&feature.name, &outcome, 1)
                 }
-            }
-        }
+            });
+
+        // for (outcome, features) in outcome_feature_pairs {}
     }
 }
 
@@ -175,6 +180,7 @@ pub struct ModelHashMapStore {
     words_appeared_map: HashMap<String, HashSet<String>>, // for |V|, use feature_name to get list of appeared words
 
     map: HashMap<String, usize>,
+
     class_set: HashSet<String>,                       // set list of class
     word_count_map: HashMap<String, usize>, // a very large hash map for look up word counts
     words_in_class_count_map: HashMap<String, usize>, // a hash map for look up word counts for each feature and class
@@ -184,13 +190,6 @@ impl Model<ModelHashMapStore> {
     pub fn new() -> Model<ModelHashMapStore> {
         Model::<ModelHashMapStore> {
             model_store: ModelHashMapStore::new(),
-            regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
-        }
-    }
-
-    pub fn new_large() -> Model<ModelHashMapStore> {
-        Model::<ModelHashMapStore> {
-            model_store: ModelHashMapStore::new_large(),
             regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
         }
     }
@@ -208,16 +207,6 @@ impl ModelHashMapStore {
             words_appeared_map: HashMap::new(),
             word_count_map: HashMap::new(),
             words_in_class_count_map: HashMap::new(),
-        }
-    }
-
-    pub fn new_large() -> ModelHashMapStore {
-        ModelHashMapStore {
-            map: HashMap::with_capacity(1024),
-            class_set: HashSet::with_capacity(1024),
-            words_appeared_map: HashMap::with_capacity(32),
-            word_count_map: HashMap::with_capacity(262_144), // 2^18
-            words_in_class_count_map: HashMap::with_capacity(1024),
         }
     }
 
@@ -262,14 +251,18 @@ impl ModelStore for ModelHashMapStore {
     // count(x_i, c_n)
     fn add_to_count_of_word_in_class(&mut self, feature_name: &str, c: &str, word: &str, v: usize) {
         let key = format!("{}%|%{}%|%{}", feature_name, c, word);
-        let word_count = self.word_count_map.entry(key).or_insert(0);
-        *word_count += v;
+        // let word_count = self.word_count_map.entry(key).or_insert(0);
+        // *word_count += v;
+
+        let word_count = self.word_count_map.get(&key).unwrap_or(&0);
+        self.word_count_map.insert(key, word_count + v);
 
         // add this word with this feature as well, no matter which class it is
         let word_set = self
             .words_appeared_map
             .entry(feature_name.to_string())
-            .or_insert(HashSet::with_capacity(262_144)); // 2^18
+            .or_insert(HashSet::new());
+
         word_set.insert(word.to_string());
     }
     fn get_count_of_word_in_class(&self, feature_name: &str, c: &str, word: &str) -> usize {
@@ -299,20 +292,20 @@ fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
     let text = text.to_lowercase();
     let text = regex.replace_all(&text, " ");
 
-    let words = text.split(" ");
+    let words: Vec<&str> = text.split(" ").collect();
 
-    // words.iter().fold(HashMap::new(), |mut acc, w| {
-    //     *acc.entry(w.to_string()).or_insert(0) += 1; // seems a slow operation?
-    //     acc
-    // })
+    words.iter().fold(HashMap::new(), |mut acc, w| {
+        *acc.entry(w.to_string()).or_insert(0) += 1; // seems a slow operation?
+        acc
+    })
 
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for word in words {
-        *counts.entry(word.to_owned()).or_insert(0) += 1;
-    }
-    // TODO: delete later
-    // counts.insert("good".to_owned(), 1);
-    return counts;
+    // let mut counts: HashMap<String, usize> = HashMap::new();
+    // for word in words {
+    //     *counts.entry(word.to_owned()).or_insert(0) += 1;
+    // }
+    // // TODO: delete later
+    // // counts.insert("good".to_owned(), 1);
+    // return counts;
 }
 
 fn log_prob(count: usize, c_f_c: usize, c_c: usize, num_of_unique_word: usize) -> f64 {

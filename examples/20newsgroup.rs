@@ -1,4 +1,7 @@
+extern crate rayon;
 extern crate rust_nb;
+
+use rayon::prelude::*;
 
 use std::fs::File;
 use std::io::BufRead;
@@ -7,7 +10,7 @@ use std::io::BufReader;
 use rust_nb::{Feature, Model};
 
 fn main() {
-    let mut model = Model::new_large();
+    let mut model = Model::new();
 
     let train_data = load_txt("examples/20newsgroup_train.txt");
     let test_data = load_txt("examples/20newsgroup_test.txt");
@@ -23,11 +26,11 @@ fn main() {
     println!("Training finished");
 
     let total_test_score: f64 = test_data
-        .iter()
+        .par_iter()
         .map(|(test_label, test_feature_v)| {
             let predict = model.predict(test_feature_v).unwrap();
             let (pred_label, test_score) = predict
-                .iter()
+                .par_iter()
                 .max_by(|(ka, va), (kb, vb)| va.partial_cmp(vb).unwrap())
                 .unwrap();
             if test_label == pred_label {
