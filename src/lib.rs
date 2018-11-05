@@ -123,12 +123,7 @@ impl<T: ModelStore> Model<T> {
     }
 
     pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
-        let mut c = 0;
-
         for (outcome, features) in outcome_feature_pairs {
-            c += 1;
-            println!("{}", c);
-
             for feature in features {
                 self.model_store
                     .add_to_priors_count_of_class(model_name, &outcome, 1);
@@ -232,13 +227,6 @@ impl Model<ModelHashMapStore> {
         }
     }
 
-    pub fn new_large() -> Model<ModelHashMapStore> {
-        Model::<ModelHashMapStore> {
-            model_store: ModelHashMapStore::new_large(),
-            regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
-        }
-    }
-
     pub fn get_store(&self) -> &ModelHashMapStore {
         &self.model_store
     }
@@ -252,16 +240,6 @@ impl ModelHashMapStore {
             words_appeared_map: HashMap::new(),
             word_count_map: HashMap::new(),
             words_in_class_count_map: HashMap::new(),
-        }
-    }
-
-    pub fn new_large() -> ModelHashMapStore {
-        ModelHashMapStore {
-            map: HashMap::with_capacity(1024),
-            class_map: HashMap::with_capacity(1024),
-            words_appeared_map: HashMap::with_capacity(32),
-            word_count_map: HashMap::with_capacity(262_144), // 2^18
-            words_in_class_count_map: HashMap::with_capacity(1024),
         }
     }
 
@@ -321,7 +299,7 @@ impl ModelStore for ModelHashMapStore {
         let word_set = self
             .words_appeared_map
             .entry(format!("{}|%{}", model_name, feature_name))
-            .or_insert(HashSet::with_capacity(262_144)); // 2^18
+            .or_insert(HashSet::new());
         word_set.insert(word.to_string());
     }
 
