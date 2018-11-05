@@ -18,14 +18,14 @@ fn main() {
         test_data.len()
     );
 
-    model.train("20newsgroup_model", train_data);
+    model.train(train_data);
 
     println!("Training finished");
 
     let total_test_score: f64 = test_data
         .iter()
         .map(|(test_label, test_feature_v)| {
-            let predict = model.predict("20newsgroup_model", test_feature_v).unwrap();
+            let predict = model.predict(test_feature_v).unwrap();
             let (pred_label, test_score) = predict
                 .iter()
                 .max_by(|(ka, va), (kb, vb)| va.partial_cmp(vb).unwrap())
@@ -35,7 +35,8 @@ fn main() {
             } else {
                 0.0
             }
-        }).sum();
+        })
+        .sum();
     let score = total_test_score / test_data.len() as f64;
 
     println!("test score: {}", score);
