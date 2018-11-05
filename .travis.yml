@@ -10,6 +10,7 @@ branches:
     - master
 script:
   - cargo test
+  - cargo test --examples
 notifications:
   email:
     on_success: never
