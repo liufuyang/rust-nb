@@ -5,13 +5,46 @@ use std::collections::{HashMap, HashSet};
 
 ///
 #[derive(Debug)]
-pub struct Feature {
-    // setting `is_text` as true will considering this feature as a multinomial feature and do word counting on feature.value.
-    // setting `is_text` as true will considering this feature as categorical feature and will use feature.value as whole word with count 1
-    pub is_text: bool,
+pub struct Text {
+    feature_name: String,
+    feature_value: String,
+}
 
-    pub name: String,
-    pub value: String,
+pub struct Category {
+    feature_name: String,
+    feature_value: String,
+}
+
+trait Feature<'a> {
+    fn is_text() -> bool;
+    fn get_name(&self) -> &'a str;
+    fn get_value(&self) -> &'a str;
+}
+
+impl<'a> Feature<'a> for Text {
+    fn is_text() -> bool {
+        true
+    }
+
+    fn get_name(&'a self) -> &'a str {
+        &self.feature_name
+    }
+    fn get_value(&'a self) -> &'a str {
+        &self.feature_value
+    }
+}
+
+impl<'a> Feature<'a> for Category {
+    fn is_text() -> bool {
+        false
+    }
+
+    fn get_name(&'a self) -> &'a str {
+        &self.feature_name
+    }
+    fn get_value(&'a self) -> &'a str {
+        &self.feature_value
+    }
 }
 
 pub trait ModelStore {
