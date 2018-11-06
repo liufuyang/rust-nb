@@ -69,9 +69,12 @@ impl<T: ModelStore> Model<T> {
                 //     None => &tmp_hash_set,
                 // };
                 // let count_of_unique_word = known_features_in_table.len();
+
                 let count_of_unique_words_in_feature = self
                     .model_store
                     .get_count_of_unique_words_in_feature(model_name, &feature.name);
+
+                // println!("{}", count_of_unique_words_in_feature); should be 72943 for 20newsgroup
 
                 let count_of_all_word_in_class = self.model_store.get_count_of_all_word_in_class(
                     model_name,
@@ -79,30 +82,42 @@ impl<T: ModelStore> Model<T> {
                     &outcome,
                 );
 
+                // println!("{}:{}", &outcome, count_of_all_word_in_class);
+
                 if feature.is_text {
                     for (word, count) in count(&feature.value, &self.regex) {
+                        if self.model_store.is_word_appeared_in_feature(
+                            model_name,
+                            &feature.name,
+                            &word,
+                        ) {
+                            lp += self.cal_log_prob(
+                                model_name,
+                                &feature.name,
+                                outcome,
+                                count_of_unique_words_in_feature,
+                                count_of_all_word_in_class,
+                                count,
+                                &word,
+                            )
+                        }
+                    }
+                } else {
+                    if self.model_store.is_word_appeared_in_feature(
+                        model_name,
+                        &feature.name,
+                        &feature.value,
+                    ) {
                         lp += self.cal_log_prob(
                             model_name,
                             &feature.name,
                             outcome,
                             count_of_unique_words_in_feature,
                             count_of_all_word_in_class,
-                            count,
-                            &word,
+                            1,
+                            &feature.value,
                         )
                     }
-                } else {
-                    // if known_features_in_table.contains(&feature.value) {
-                    lp += self.cal_log_prob(
-                        model_name,
-                        &feature.name,
-                        outcome,
-                        count_of_unique_words_in_feature,
-                        count_of_all_word_in_class,
-                        1,
-                        &feature.value,
-                    )
-                    // }
                 }
             }
 
@@ -197,6 +212,10 @@ pub trait ModelStore {
         c: &str,
     ) -> usize;
 
+    fn add_unique_word_in_feature(&mut self, model_name: &str, feature_name: &str, word: &str);
+    fn is_word_appeared_in_feature(&self, model_name: &str, feature_name: &str, word: &str)
+        -> bool;
+
     fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize;
 }
 
@@ -285,24 +304,26 @@ impl ModelStore for ModelHashMapStore {
         let word_count = self.word_count_map.entry(key).or_insert(0);
         *word_count += v;
 
-        let is_new_word = 0 == self.map_get(
-            model_name,
-            &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
-        );
+        // let is_new_word = 0 == self.map_get(
+        //     model_name,
+        //     &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+        // );
 
-        if is_new_word {
-            // record the word in key and add count_unique_words_in_feature
-            self.map_add(
-                model_name,
-                &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
-                1,
-            );
-            self.map_add(
-                model_name,
-                &format!("count_unique_words_in_feature|%{}", feature_name),
-                1,
-            );
-        }
+        // if is_new_word {
+        //     // record the word in key and add count_unique_words_in_feature
+        //     self.map_add(
+        //         model_name,
+        //         &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+        //         1,
+        //     );
+        //     self.map_add(
+        //         model_name,
+        //         &format!("count_unique_words_in_feature|%{}", feature_name),
+        //         1,
+        //     );
+        // }
+
+        self.add_unique_word_in_feature(model_name, feature_name, word);
     }
 
     fn get_count_of_word_in_class(
@@ -341,6 +362,31 @@ impl ModelStore for ModelHashMapStore {
             .unwrap_or_else(|| &0)
     }
 
+    fn add_unique_word_in_feature(&mut self, model_name: &str, feature_name: &str, word: &str) {
+        if !self.is_word_appeared_in_feature(model_name, feature_name, word) {
+            self.map_add(
+                model_name,
+                &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+                1,
+            );
+            self.map_add(
+                model_name,
+                &format!("count_unique_words_in_feature|%{}", feature_name),
+                1,
+            );
+        }
+    }
+    fn is_word_appeared_in_feature(
+        &self,
+        model_name: &str,
+        feature_name: &str,
+        word: &str,
+    ) -> bool {
+        0 != self.map_get(
+            model_name,
+            &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+        )
+    }
     fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize {
         self.map_get(
             model_name,
