@@ -35,10 +35,10 @@ impl<T: ModelStore> Model<T> {
                 .get_count_of_word_in_class(model_name, feature_name, outcome, word);
 
         log_prob(
-            count_of_word,
-            count_of_word_in_class,
-            count_of_all_word_in_class,
-            count_of_unique_words_in_feature,
+            count_of_word,                    // t_i
+            count_of_word_in_class,           // c_f_c
+            count_of_all_word_in_class,       // c_c
+            count_of_unique_words_in_feature, // |V|
         )
     }
 
@@ -61,20 +61,9 @@ impl<T: ModelStore> Model<T> {
             // let tmp_hash_set = HashSet::new();
 
             for feature in features {
-                // let known_features_in_table = match self
-                //     .model_store
-                //     .get_appeared_words(model_name, &feature.name)
-                // {
-                //     Some(set) => set,
-                //     None => &tmp_hash_set,
-                // };
-                // let count_of_unique_word = known_features_in_table.len();
-
                 let count_of_unique_words_in_feature = self
                     .model_store
                     .get_count_of_unique_words_in_feature(model_name, &feature.name);
-
-                // println!("{}", count_of_unique_words_in_feature); should be 72943 for 20newsgroup
 
                 let count_of_all_word_in_class = self.model_store.get_count_of_all_word_in_class(
                     model_name,
@@ -225,8 +214,6 @@ pub trait ModelStore {
 pub struct ModelHashMapStore {
     map: HashMap<String, usize>,
     class_map: HashMap<String, HashSet<String>>, // model_name to list of class
-    word_count_map: HashMap<String, usize>,      // a very large hash map for look up word counts
-    words_in_class_count_map: HashMap<String, usize>, // a hash map for look up word counts for each feature and class
 }
 
 impl Model<ModelHashMapStore> {
@@ -247,26 +234,24 @@ impl ModelHashMapStore {
         ModelHashMapStore {
             map: HashMap::new(),
             class_map: HashMap::new(),
-            word_count_map: HashMap::new(),
-            words_in_class_count_map: HashMap::new(),
         }
     }
 
     fn map_add(&mut self, model_name: &str, prefix: &str, v: usize) {
-        let key = format!("{}|%{}", model_name, prefix);
+        let key = format!("{}|{}", model_name, prefix);
         let total_count = self.map.entry(key).or_insert(0);
         *total_count += v;
     }
 
     fn map_get(&self, model_name: &str, prefix: &str) -> usize {
-        let key = format!("{}|%{}", model_name, prefix);
+        let key = format!("{}|{}", model_name, prefix);
         *self.map.get(&key).unwrap_or_else(|| &0)
     }
 }
 
 impl ModelStore for ModelHashMapStore {
     fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: usize) {
-        self.map_add(model_name, &format!("priors_count_of_class|%{}", c), v);
+        self.map_add(model_name, &format!("_Ncn|{}", c), v); // _Ncn: priors_count_of_class
 
         // add class to class_map
         let class_vec = self
@@ -277,7 +262,7 @@ impl ModelStore for ModelHashMapStore {
     }
 
     fn get_priors_count_of_class(&self, model_name: &str, c: &str) -> usize {
-        self.map_get(model_name, &format!("priors_count_of_class|%{}", c))
+        self.map_get(model_name, &format!("_Ncn|{}", c)) // _Ncn: priors_count_of_class
     }
 
     fn get_all_classes(&self, model_name: &str) -> Option<&HashSet<String>> {
@@ -285,11 +270,11 @@ impl ModelStore for ModelHashMapStore {
     }
 
     fn add_to_total_data_count(&mut self, model_name: &str, v: usize) {
-        self.map_add(model_name, "total_data_count", v);
+        self.map_add(model_name, "_N", v); //_N: sum of all prior count N_cn of all classes c_n.
     }
 
     fn get_total_data_count(&self, model_name: &str) -> usize {
-        self.map_get(model_name, "total_data_count")
+        self.map_get(model_name, "_N") //_N: sum of all prior count N_cn of all classes c_n.
     }
 
     fn add_to_count_of_word_in_class(
@@ -300,28 +285,11 @@ impl ModelStore for ModelHashMapStore {
         word: &str,
         v: usize,
     ) {
-        let key = format!("{}|%{}%|%{}%|%{}", model_name, feature_name, c, word);
-        let word_count = self.word_count_map.entry(key).or_insert(0);
-        *word_count += v;
-
-        // let is_new_word = 0 == self.map_get(
-        //     model_name,
-        //     &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
-        // );
-
-        // if is_new_word {
-        //     // record the word in key and add count_unique_words_in_feature
-        //     self.map_add(
-        //         model_name,
-        //         &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
-        //         1,
-        //     );
-        //     self.map_add(
-        //         model_name,
-        //         &format!("count_unique_words_in_feature|%{}", feature_name),
-        //         1,
-        //     );
-        // }
+        self.map_add(
+            model_name,
+            &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
+            v,
+        );
 
         self.add_unique_word_in_feature(model_name, feature_name, word);
     }
@@ -333,8 +301,10 @@ impl ModelStore for ModelHashMapStore {
         c: &str,
         word: &str,
     ) -> usize {
-        let key = format!("{}|%{}%|%{}%|%{}", model_name, feature_name, c, word);
-        *self.word_count_map.get(&key).unwrap_or_else(|| &0)
+        self.map_get(
+            model_name,
+            &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
+        )
     }
 
     fn add_to_count_of_all_word_in_class(
@@ -344,8 +314,8 @@ impl ModelStore for ModelHashMapStore {
         c: &str,
         v: usize,
     ) {
-        let key = format!("{}|%{}%|%{}", model_name, feature_name, c);
-        let words_count = self.words_in_class_count_map.entry(key).or_insert(0);
+        let key = format!("{}|_c_c|{}|{}", model_name, feature_name, c);
+        let words_count = self.map.entry(key).or_insert(0);
         *words_count += v;
     }
 
@@ -355,25 +325,18 @@ impl ModelStore for ModelHashMapStore {
         feature_name: &str,
         c: &str,
     ) -> usize {
-        let key = format!("{}|%{}%|%{}", model_name, feature_name, c);
-        *self
-            .words_in_class_count_map
-            .get(&key)
-            .unwrap_or_else(|| &0)
+        let key = format!("{}|_c_c|{}|{}", model_name, feature_name, c);
+        *self.map.get(&key).unwrap_or_else(|| &0)
     }
 
     fn add_unique_word_in_feature(&mut self, model_name: &str, feature_name: &str, word: &str) {
         if !self.is_word_appeared_in_feature(model_name, feature_name, word) {
             self.map_add(
                 model_name,
-                &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+                &format!("_Vw|{}|{}", feature_name, word), // _Vw: marker for unique word in feature
                 1,
             );
-            self.map_add(
-                model_name,
-                &format!("count_unique_words_in_feature|%{}", feature_name),
-                1,
-            );
+            self.map_add(model_name, &format!("_V|{}", feature_name), 1);
         }
     }
     fn is_word_appeared_in_feature(
@@ -382,16 +345,10 @@ impl ModelStore for ModelHashMapStore {
         feature_name: &str,
         word: &str,
     ) -> bool {
-        0 != self.map_get(
-            model_name,
-            &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
-        )
+        0 != self.map_get(model_name, &format!("_Vw|{}|{}", feature_name, word)) // _Vw: marker for unique word in feature
     }
     fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize {
-        self.map_get(
-            model_name,
-            &format!("count_unique_words_in_feature|%{}", feature_name),
-        )
+        self.map_get(model_name, &format!("_V|{}", feature_name))
     }
 }
 
@@ -419,7 +376,8 @@ fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
     return counts;
 }
 
-///
+/// c_f_c: count_of_word_in_class
+/// c_c:
 /// v: count_of_unique_words_in_feature
 fn log_prob(count: usize, c_f_c: usize, c_c: usize, v: usize) -> f64 {
     let pseudo_count = 1.0;
