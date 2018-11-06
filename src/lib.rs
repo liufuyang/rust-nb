@@ -2,6 +2,9 @@ extern crate regex;
 
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 
 ///
 #[derive(Debug)]
@@ -30,9 +33,26 @@ pub trait ModelStore {
 pub struct Model<T: ModelStore> {
     model_store: T,
     regex: Regex, // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
+    stop_words: Option<HashSet<String>>,
 }
 
 impl<T: ModelStore> Model<T> {
+    pub fn with_stop_words_file(mut self, stop_words_file: &str) -> Self {
+        let f = File::open(stop_words_file).unwrap();
+        let f = BufReader::new(&f);
+
+        let mut stop_words = HashSet::new();
+
+        for line in f.lines() {
+            let line = line.unwrap();
+            stop_words.insert(line);
+        }
+
+        self.stop_words = Some(stop_words);
+
+        self
+    }
+
     pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
         for (class, features) in class_feature_pairs {
             for f in features {
@@ -41,7 +61,7 @@ impl<T: ModelStore> Model<T> {
 
                 match f.feature_type {
                     FeatureType::Text => {
-                        let word_counts = count(&f.value, &self.regex);
+                        let word_counts = count(&f.value, &self.regex, &self.stop_words);
                         for (word, count) in word_counts {
                             self.add_to_count_of_word_in_class(
                                 model_name, &f.name, &class, &word, count,
@@ -87,7 +107,7 @@ impl<T: ModelStore> Model<T> {
 
                 match f.feature_type {
                     FeatureType::Text => {
-                        for (word, count) in count(&f.value, &self.regex) {
+                        for (word, count) in count(&f.value, &self.regex, &self.stop_words) {
                             if self.is_word_appeared_in_feature(model_name, &f.name, &word) {
                                 lp += self.cal_log_prob(
                                     model_name,
@@ -259,6 +279,7 @@ impl Model<ModelHashMapStore> {
                 class_map: HashMap::new(),
             },
             regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
+            stop_words: None,
         }
     }
 }
@@ -292,11 +313,23 @@ impl ModelStore for ModelHashMapStore {
 ///
 /// private util functions
 ///
-fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
+fn count(
+    text: &str,
+    regex: &Regex,
+    stop_words: &Option<HashSet<String>>,
+) -> HashMap<String, usize> {
     let text = regex.replace_all(&text, " ");
     let text = text.trim().to_lowercase();
 
-    let counts = text.split(" ").fold(HashMap::new(), |mut acc, w| {
+    let texts: Vec<&str> = match stop_words {
+        Some(stop_words_set) => text
+            .split(" ")
+            .filter(|w| !stop_words_set.contains(&w.to_string()))
+            .collect(),
+        None => text.split(" ").collect(),
+    };
+
+    let counts = texts.iter().fold(HashMap::new(), |mut acc, w| {
         *acc.entry(w.to_string()).or_insert(0) += 1;
         acc
     });
@@ -344,7 +377,7 @@ fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
 #[test]
 fn count_works() {
     let regex = Regex::new(r"[^a-zA-Z]+").unwrap();
-    let result = count("This is good good ... Rust rust RUST", &regex);
+    let result = count("This is good good ... Rust rust RUST", &regex, &None);
     assert_eq!(2, result["good"]);
     assert_eq!(1, result["this"]);
     assert_eq!(1, result["is"]);

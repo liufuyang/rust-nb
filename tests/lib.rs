@@ -25,7 +25,6 @@ mod rust_nb {
             ),
         ];
         model.train("test_model", input_train);
-        // println!("{:?}", model.get_store());
 
         let input_test = vec![Feature {
             feature_type: FeatureType::Text,
