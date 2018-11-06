@@ -324,7 +324,7 @@ fn count(
     let texts: Vec<&str> = match stop_words {
         Some(stop_words_set) => text
             .split(" ")
-            .filter(|w| !stop_words_set.contains(&w.to_string()))
+            .filter(|w| !stop_words_set.contains(*w))
             .collect(),
         None => text.split(" ").collect(),
     };
