@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
-use rust_nb::{Feature, Model};
+use rust_nb::{Feature, FeatureType, Model};
 
 fn main() {
     let mut model = Model::new();
@@ -38,7 +38,8 @@ fn main() {
             } else {
                 0.0
             }
-        }).sum();
+        })
+        .sum();
     let score = total_test_score / test_data.len() as f64;
 
     println!("test score: {}", score);
@@ -64,7 +65,7 @@ fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
         v.push((
             first.to_owned(),
             vec![Feature {
-                is_text: true,
+                feature_type: FeatureType::Text,
                 name: "20newsgroup text".to_owned(),
                 value: second.to_owned(),
             }],

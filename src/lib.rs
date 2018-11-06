@@ -5,15 +5,16 @@ use std::collections::{HashMap, HashSet};
 
 ///
 #[derive(Debug)]
-pub enum Feature {
-    Text {
-        feature_name: String,
-        feature_value: String,
-    }, // a multinomial feature and do word counting on feature.value.
-    Category {
-        feature_name: String,
-        feature_value: String,
-    }, // categorical feature and will use feature.value as whole word with count 1
+pub struct Feature {
+    pub feature_type: FeatureType,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug)]
+pub enum FeatureType {
+    Text,     // a multinomial feature and do word counting on feature.value.
+    Category, // categorical feature and will use feature.value as whole word with count 1
 }
 
 pub trait ModelStore {
@@ -32,6 +33,35 @@ pub struct Model<T: ModelStore> {
 }
 
 impl<T: ModelStore> Model<T> {
+    pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
+        for (class, features) in class_feature_pairs {
+            for f in features {
+                self.add_to_priors_count_of_class(model_name, &class, 1);
+                self.add_to_total_data_count(model_name, 1);
+
+                match f.feature_type {
+                    FeatureType::Text => {
+                        let word_counts = count(&f.value, &self.regex);
+                        for (word, count) in word_counts {
+                            self.add_to_count_of_word_in_class(
+                                model_name, &f.name, &class, &word, count,
+                            );
+                            self.add_to_count_of_all_word_in_class(
+                                model_name, &f.name, &class, count,
+                            )
+                        }
+                    }
+                    FeatureType::Category => {
+                        self.add_to_count_of_word_in_class(
+                            model_name, &f.name, &class, &f.value, 1,
+                        );
+                        self.add_to_count_of_all_word_in_class(model_name, &f.name, &class, 1)
+                    }
+                }
+            }
+        }
+    }
+
     pub fn predict(
         &self,
         model_name: &str,
@@ -48,26 +78,20 @@ impl<T: ModelStore> Model<T> {
             let mut lp = 0.0;
             // let tmp_hash_set = HashSet::new();
 
-            for feature in features {
-                match feature {
-                    Feature::Text {
-                        feature_name,
-                        feature_value,
-                    } => {
-                        let count_of_unique_words_in_feature =
-                            self.get_count_of_unique_words_in_feature(model_name, &feature_name);
+            for f in features {
+                let count_of_unique_words_in_feature =
+                    self.get_count_of_unique_words_in_feature(model_name, &f.name);
 
-                        let count_of_all_word_in_class = self.get_count_of_all_word_in_class(
-                            model_name,
-                            &feature_name,
-                            &outcome,
-                        );
+                let count_of_all_word_in_class =
+                    self.get_count_of_all_word_in_class(model_name, &f.name, &outcome);
 
-                        for (word, count) in count(&feature_value, &self.regex) {
-                            if self.is_word_appeared_in_feature(model_name, &feature_name, &word) {
+                match f.feature_type {
+                    FeatureType::Text => {
+                        for (word, count) in count(&f.value, &self.regex) {
+                            if self.is_word_appeared_in_feature(model_name, &f.name, &word) {
                                 lp += self.cal_log_prob(
                                     model_name,
-                                    &feature_name,
+                                    &f.name,
                                     outcome,
                                     count_of_unique_words_in_feature,
                                     count_of_all_word_in_class,
@@ -77,28 +101,16 @@ impl<T: ModelStore> Model<T> {
                             }
                         }
                     }
-                    Feature::Category {
-                        feature_name,
-                        feature_value,
-                    } => {
-                        let count_of_unique_words_in_feature =
-                            self.get_count_of_unique_words_in_feature(model_name, feature_name);
-
-                        let count_of_all_word_in_class = self.get_count_of_all_word_in_class(
-                            model_name,
-                            &feature_name,
-                            &outcome,
-                        );
-                        if self.is_word_appeared_in_feature(model_name, feature_name, feature_value)
-                        {
+                    FeatureType::Category => {
+                        if self.is_word_appeared_in_feature(model_name, &f.name, &f.value) {
                             lp += self.cal_log_prob(
                                 model_name,
-                                feature_name,
+                                &f.name,
                                 outcome,
                                 count_of_unique_words_in_feature,
                                 count_of_all_word_in_class,
                                 1,
-                                feature_value,
+                                &f.value,
                             )
                         }
                     }
@@ -111,44 +123,6 @@ impl<T: ModelStore> Model<T> {
         }
 
         Some(normalize(result))
-    }
-
-    pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
-        for (outcome, features) in outcome_feature_pairs {
-            for feature in features {
-                self.add_to_priors_count_of_class(model_name, &outcome, 1);
-                self.add_to_total_data_count(model_name, 1);
-
-                if feature.is_text {
-                    let word_counts = count(&feature.value, &self.regex);
-                    for (word, count) in word_counts {
-                        self.add_to_count_of_word_in_class(
-                            model_name,
-                            &feature.name,
-                            &outcome,
-                            &word,
-                            count,
-                        );
-
-                        self.add_to_count_of_all_word_in_class(
-                            model_name,
-                            &feature.name,
-                            &outcome,
-                            count,
-                        )
-                    }
-                } else {
-                    self.add_to_count_of_word_in_class(
-                        model_name,
-                        &feature.name,
-                        &outcome,
-                        &feature.value,
-                        1,
-                    );
-                    self.add_to_count_of_all_word_in_class(model_name, &feature.name, &outcome, 1)
-                }
-            }
-        }
     }
 
     fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: usize) {

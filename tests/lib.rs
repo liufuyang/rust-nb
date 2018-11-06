@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod rust_nb {
-    use rust_nb::{Feature, Model};
+    use rust_nb::{Feature, FeatureType, Model};
 
     #[test]
     fn model_works_simple_case() {
@@ -10,7 +10,7 @@ mod rust_nb {
             (
                 "happy".to_owned(),
                 vec![Feature {
-                    is_text: true,
+                    feature_type: FeatureType::Text,
                     name: "my_words".to_owned(),
                     value: "good".to_owned(),
                 }],
@@ -18,7 +18,7 @@ mod rust_nb {
             (
                 "sad".to_owned(),
                 vec![Feature {
-                    is_text: true,
+                    feature_type: FeatureType::Text,
                     name: "my_words".to_owned(),
                     value: "bad".to_owned(),
                 }],
@@ -28,7 +28,7 @@ mod rust_nb {
         // println!("{:?}", model.get_store());
 
         let input_test = vec![Feature {
-            is_text: true,
+            feature_type: FeatureType::Text,
             name: "my_words".to_owned(),
             value: "no opinion".to_owned(),
         }];
@@ -37,7 +37,7 @@ mod rust_nb {
         assert_eq!(0.5, *result.get("sad").unwrap());
 
         let input_test = vec![Feature {
-            is_text: true,
+            feature_type: FeatureType::Text,
             name: "my_words".to_owned(),
             value: "GOOD".to_owned(),
         }];
@@ -54,7 +54,7 @@ mod rust_nb {
             (
                 "happy".to_owned(),
                 vec![Feature {
-                    is_text: true,
+                    feature_type: FeatureType::Text,
                     name: "my_words".to_owned(),
                     value: "The weather is so good".to_owned(),
                 }],
@@ -62,7 +62,7 @@ mod rust_nb {
             (
                 "sad".to_owned(),
                 vec![Feature {
-                    is_text: true,
+                    feature_type: FeatureType::Text,
                     name: "my_words".to_owned(),
                     value: "that food tastes so bad".to_owned(),
                 }],
@@ -71,7 +71,7 @@ mod rust_nb {
         model.train("test_model", input_train);
 
         let input_test = vec![Feature {
-            is_text: true,
+            feature_type: FeatureType::Text,
             name: "my_words".to_owned(),
             value: "thinking about the weather ...".to_owned(),
         }];
