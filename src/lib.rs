@@ -2,16 +2,22 @@ extern crate regex;
 
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 
 ///
 #[derive(Debug)]
 pub struct Feature {
-    // setting `is_text` as true will considering this feature as a multinomial feature and do word counting on feature.value.
-    // setting `is_text` as true will considering this feature as categorical feature and will use feature.value as whole word with count 1
-    pub is_text: bool,
-
+    pub feature_type: FeatureType,
     pub name: String,
     pub value: String,
+}
+
+#[derive(Debug)]
+pub enum FeatureType {
+    Text,     // a multinomial feature and do word counting on feature.value.
+    Category, // categorical feature and will use feature.value as whole word with count 1
 }
 
 pub trait ModelStore {
@@ -27,9 +33,55 @@ pub trait ModelStore {
 pub struct Model<T: ModelStore> {
     model_store: T,
     regex: Regex, // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
+    stop_words: Option<HashSet<String>>,
 }
 
 impl<T: ModelStore> Model<T> {
+    pub fn with_stop_words_file(mut self, stop_words_file: &str) -> Self {
+        let f = File::open(stop_words_file).unwrap();
+        let f = BufReader::new(&f);
+
+        let mut stop_words = HashSet::new();
+
+        for line in f.lines() {
+            let line = line.unwrap();
+            stop_words.insert(line);
+        }
+
+        self.stop_words = Some(stop_words);
+
+        self
+    }
+
+    pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
+        for (class, features) in class_feature_pairs {
+            for f in features {
+                self.add_to_priors_count_of_class(model_name, &class, 1);
+                self.add_to_total_data_count(model_name, 1);
+
+                match f.feature_type {
+                    FeatureType::Text => {
+                        let word_counts = count(&f.value, &self.regex, &self.stop_words);
+                        for (word, count) in word_counts {
+                            self.add_to_count_of_word_in_class(
+                                model_name, &f.name, &class, &word, count,
+                            );
+                            self.add_to_count_of_all_word_in_class(
+                                model_name, &f.name, &class, count,
+                            )
+                        }
+                    }
+                    FeatureType::Category => {
+                        self.add_to_count_of_word_in_class(
+                            model_name, &f.name, &class, &f.value, 1,
+                        );
+                        self.add_to_count_of_all_word_in_class(model_name, &f.name, &class, 1)
+                    }
+                }
+            }
+        }
+    }
+
     pub fn predict(
         &self,
         model_name: &str,
@@ -46,42 +98,43 @@ impl<T: ModelStore> Model<T> {
             let mut lp = 0.0;
             // let tmp_hash_set = HashSet::new();
 
-            for feature in features {
+            for f in features {
                 let count_of_unique_words_in_feature =
-                    self.get_count_of_unique_words_in_feature(model_name, &feature.name);
+                    self.get_count_of_unique_words_in_feature(model_name, &f.name);
 
                 let count_of_all_word_in_class =
-                    self.get_count_of_all_word_in_class(model_name, &feature.name, &outcome);
+                    self.get_count_of_all_word_in_class(model_name, &f.name, &outcome);
 
-                // println!("{}:{}", &outcome, count_of_all_word_in_class);
-
-                if feature.is_text {
-                    for (word, count) in count(&feature.value, &self.regex) {
-                        if self.is_word_appeared_in_feature(model_name, &feature.name, &word) {
+                match f.feature_type {
+                    FeatureType::Text => {
+                        for (word, count) in count(&f.value, &self.regex, &self.stop_words) {
+                            if self.is_word_appeared_in_feature(model_name, &f.name, &word) {
+                                lp += self.cal_log_prob(
+                                    model_name,
+                                    &f.name,
+                                    outcome,
+                                    count_of_unique_words_in_feature,
+                                    count_of_all_word_in_class,
+                                    count,
+                                    &word,
+                                )
+                            }
+                        }
+                    }
+                    FeatureType::Category => {
+                        if self.is_word_appeared_in_feature(model_name, &f.name, &f.value) {
                             lp += self.cal_log_prob(
                                 model_name,
-                                &feature.name,
+                                &f.name,
                                 outcome,
                                 count_of_unique_words_in_feature,
                                 count_of_all_word_in_class,
-                                count,
-                                &word,
+                                1,
+                                &f.value,
                             )
                         }
                     }
-                } else {
-                    if self.is_word_appeared_in_feature(model_name, &feature.name, &feature.value) {
-                        lp += self.cal_log_prob(
-                            model_name,
-                            &feature.name,
-                            outcome,
-                            count_of_unique_words_in_feature,
-                            count_of_all_word_in_class,
-                            1,
-                            &feature.value,
-                        )
-                    }
-                }
+                };
             }
 
             let final_log_p =
@@ -90,44 +143,6 @@ impl<T: ModelStore> Model<T> {
         }
 
         Some(normalize(result))
-    }
-
-    pub fn train(&mut self, model_name: &str, outcome_feature_pairs: Vec<(String, Vec<Feature>)>) {
-        for (outcome, features) in outcome_feature_pairs {
-            for feature in features {
-                self.add_to_priors_count_of_class(model_name, &outcome, 1);
-                self.add_to_total_data_count(model_name, 1);
-
-                if feature.is_text {
-                    let word_counts = count(&feature.value, &self.regex);
-                    for (word, count) in word_counts {
-                        self.add_to_count_of_word_in_class(
-                            model_name,
-                            &feature.name,
-                            &outcome,
-                            &word,
-                            count,
-                        );
-
-                        self.add_to_count_of_all_word_in_class(
-                            model_name,
-                            &feature.name,
-                            &outcome,
-                            count,
-                        )
-                    }
-                } else {
-                    self.add_to_count_of_word_in_class(
-                        model_name,
-                        &feature.name,
-                        &outcome,
-                        &feature.value,
-                        1,
-                    );
-                    self.add_to_count_of_all_word_in_class(model_name, &feature.name, &outcome, 1)
-                }
-            }
-        }
     }
 
     fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: usize) {
@@ -264,6 +279,7 @@ impl Model<ModelHashMapStore> {
                 class_map: HashMap::new(),
             },
             regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
+            stop_words: None,
         }
     }
 }
@@ -297,24 +313,28 @@ impl ModelStore for ModelHashMapStore {
 ///
 /// private util functions
 ///
-fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
+fn count(
+    text: &str,
+    regex: &Regex,
+    stop_words: &Option<HashSet<String>>,
+) -> HashMap<String, usize> {
     let text = regex.replace_all(&text, " ");
-
     let text = text.trim().to_lowercase();
-    let words = text.split(" ");
 
-    // words.iter().fold(HashMap::new(), |mut acc, w| {
-    //     *acc.entry(w.to_string()).or_insert(0) += 1; // seems a slow operation?
-    //     acc
-    // })
+    let texts: Vec<&str> = match stop_words {
+        Some(stop_words_set) => text
+            .split(" ")
+            .filter(|w| !stop_words_set.contains(*w))
+            .collect(),
+        None => text.split(" ").collect(),
+    };
 
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for word in words {
-        *counts.entry(word.to_owned()).or_insert(0) += 1;
-    }
-    // TODO: delete later
-    // counts.insert("good".to_owned(), 1);
-    return counts;
+    let counts = texts.iter().fold(HashMap::new(), |mut acc, w| {
+        *acc.entry(w.to_string()).or_insert(0) += 1;
+        acc
+    });
+
+    counts
 }
 
 /// c_f_c: count_of_word_in_class
@@ -357,7 +377,7 @@ fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
 #[test]
 fn count_works() {
     let regex = Regex::new(r"[^a-zA-Z]+").unwrap();
-    let result = count("This is good good ... Rust rust RUST", &regex);
+    let result = count("This is good good ... Rust rust RUST", &regex, &None);
     assert_eq!(2, result["good"]);
     assert_eq!(1, result["this"]);
     assert_eq!(1, result["is"]);

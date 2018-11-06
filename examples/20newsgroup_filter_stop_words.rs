@@ -10,7 +10,7 @@ use std::io::BufReader;
 use rust_nb::{Feature, FeatureType, Model};
 
 fn main() {
-    let mut model = Model::new();
+    let mut model = Model::new().with_stop_words_file("examples/english-stop-words-large.txt");
 
     let train_data = load_txt("examples/20newsgroup_train.txt");
     let test_data = load_txt("examples/20newsgroup_test.txt");
@@ -43,11 +43,7 @@ fn main() {
     let score = total_test_score / test_data.len() as f64;
 
     println!("test score: {}", score);
-    assert!((0.5771375464684015 - score).abs() < 1e-10);
-    // old master gives       0.5785979819437068
-    // blayze gives           0.5770609318996416
-    // pblayze gives          0.5770609318996416
-    // python                 0.5779341
+    assert!((0.6456452469463622 - score).abs() < 1e-10);
 }
 
 fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
