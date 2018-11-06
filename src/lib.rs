@@ -61,10 +61,11 @@ impl<T: ModelStore> Model<T> {
 
                 match f.feature_type {
                     FeatureType::Text => {
-                        let word_counts = count(&f.value, &self.regex, &self.stop_words);
+                        let feature_value = clean_text(&f.value, &self.regex);
+                        let word_counts = count(&feature_value, &self.stop_words);
                         for (word, count) in word_counts {
                             self.add_to_count_of_word_in_class(
-                                model_name, &f.name, &class, &word, count,
+                                model_name, &f.name, &class, word, count,
                             );
                             self.add_to_count_of_all_word_in_class(
                                 model_name, &f.name, &class, count,
@@ -107,7 +108,8 @@ impl<T: ModelStore> Model<T> {
 
                 match f.feature_type {
                     FeatureType::Text => {
-                        for (word, count) in count(&f.value, &self.regex, &self.stop_words) {
+                        let feature_value = clean_text(&f.value, &self.regex);
+                        for (word, count) in count(&feature_value, &self.stop_words) {
                             if self.is_word_appeared_in_feature(model_name, &f.name, &word) {
                                 lp += self.cal_log_prob(
                                     model_name,
@@ -116,7 +118,7 @@ impl<T: ModelStore> Model<T> {
                                     count_of_unique_words_in_feature,
                                     count_of_all_word_in_class,
                                     count,
-                                    &word,
+                                    word,
                                 )
                             }
                         }
@@ -313,14 +315,14 @@ impl ModelStore for ModelHashMapStore {
 ///
 /// private util functions
 ///
-fn count(
-    text: &str,
-    regex: &Regex,
-    stop_words: &Option<HashSet<String>>,
-) -> HashMap<String, usize> {
+
+fn clean_text(text: &str, regex: &Regex) -> String {
     let text = regex.replace_all(&text, " ");
     let text = text.trim().to_lowercase();
+    text
+}
 
+fn count<'a>(text: &'a str, stop_words: &Option<HashSet<String>>) -> HashMap<&'a str, usize> {
     let texts: Vec<&str> = match stop_words {
         Some(stop_words_set) => text
             .split(" ")
@@ -330,7 +332,7 @@ fn count(
     };
 
     let counts = texts.iter().fold(HashMap::new(), |mut acc, w| {
-        *acc.entry(w.to_string()).or_insert(0) += 1;
+        *acc.entry(*w).or_insert(0) += 1;
         acc
     });
 
@@ -376,12 +378,19 @@ fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
 ///
 #[test]
 fn count_works() {
-    let regex = Regex::new(r"[^a-zA-Z]+").unwrap();
-    let result = count("This is good good ... Rust rust RUST", &regex, &None);
+    let result = count("This is good good ... Rust Rust Rust", &None);
     assert_eq!(2, result["good"]);
-    assert_eq!(1, result["this"]);
+    assert_eq!(1, result["This"]);
     assert_eq!(1, result["is"]);
-    assert_eq!(3, result["rust"]);
+    assert_eq!(3, result["Rust"]);
+}
+
+#[test]
+fn clean_text_works() {
+    let text = "This is &/some weird TEXT";
+
+    let cleaned_text = clean_text(text, &Regex::new(r"[^a-zA-Z]+").unwrap());
+    assert_eq!("this is some weird text", cleaned_text);
 }
 
 #[test]
