@@ -38,11 +38,15 @@ fn main() {
             } else {
                 0.0
             }
-        })
-        .sum();
+        }).sum();
     let score = total_test_score / test_data.len() as f64;
 
     println!("test score: {}", score);
+    assert!((0.5771375464684015 - score).abs() < 1e-10);
+    // old master gives       0.5785979819437068
+    // blayze gives           0.5770609318996416
+    // pblayze gives          0.5770609318996416
+    // python                 0.5779341
 }
 
 fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
