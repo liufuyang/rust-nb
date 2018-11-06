@@ -25,7 +25,7 @@ impl<T: ModelStore> Model<T> {
         model_name: &str,
         feature_name: &str,
         outcome: &str,
-        count_of_unique_word: usize,
+        count_of_unique_words_in_feature: usize, // |V|
         count_of_all_word_in_class: usize,
         count_of_word: usize,
         word: &str,
@@ -33,11 +33,12 @@ impl<T: ModelStore> Model<T> {
         let count_of_word_in_class =
             self.model_store
                 .get_count_of_word_in_class(model_name, feature_name, outcome, word);
+
         log_prob(
             count_of_word,
             count_of_word_in_class,
             count_of_all_word_in_class,
-            count_of_unique_word,
+            count_of_unique_words_in_feature,
         )
     }
 
@@ -57,17 +58,21 @@ impl<T: ModelStore> Model<T> {
             let total_data_count = self.model_store.get_total_data_count(model_name);
 
             let mut lp = 0.0;
-            let tmp_hash_set = HashSet::new();
+            // let tmp_hash_set = HashSet::new();
 
             for feature in features {
-                let known_features_in_table = match self
+                // let known_features_in_table = match self
+                //     .model_store
+                //     .get_appeared_words(model_name, &feature.name)
+                // {
+                //     Some(set) => set,
+                //     None => &tmp_hash_set,
+                // };
+                // let count_of_unique_word = known_features_in_table.len();
+                let count_of_unique_words_in_feature = self
                     .model_store
-                    .get_appeared_words(model_name, &feature.name)
-                {
-                    Some(set) => set,
-                    None => &tmp_hash_set,
-                };
-                let count_of_unique_word = known_features_in_table.len();
+                    .get_count_of_unique_words_in_feature(model_name, &feature.name);
+
                 let count_of_all_word_in_class = self.model_store.get_count_of_all_word_in_class(
                     model_name,
                     &feature.name,
@@ -75,42 +80,29 @@ impl<T: ModelStore> Model<T> {
                 );
 
                 if feature.is_text {
-                    let word_counts_for_current_feature = count(&feature.value, &self.regex);
-                    let current_words_set: HashSet<String> =
-                        word_counts_for_current_feature.keys().cloned().collect();
-
-                    let known_words: HashSet<&String> = current_words_set
-                        .intersection(&known_features_in_table)
-                        .collect();
-
-                    for word in known_words {
-                        let count = match word_counts_for_current_feature.get(word) {
-                            Some(v) => *v,
-                            None => 0,
-                        };
-
+                    for (word, count) in count(&feature.value, &self.regex) {
                         lp += self.cal_log_prob(
                             model_name,
                             &feature.name,
                             outcome,
-                            count_of_unique_word,
+                            count_of_unique_words_in_feature,
                             count_of_all_word_in_class,
                             count,
-                            word,
+                            &word,
                         )
                     }
                 } else {
-                    if known_features_in_table.contains(&feature.value) {
-                        lp += self.cal_log_prob(
-                            model_name,
-                            &feature.name,
-                            outcome,
-                            count_of_unique_word,
-                            count_of_all_word_in_class,
-                            1,
-                            &feature.value,
-                        )
-                    }
+                    // if known_features_in_table.contains(&feature.value) {
+                    lp += self.cal_log_prob(
+                        model_name,
+                        &feature.name,
+                        outcome,
+                        count_of_unique_words_in_feature,
+                        count_of_all_word_in_class,
+                        1,
+                        &feature.value,
+                    )
+                    // }
                 }
             }
 
@@ -205,7 +197,7 @@ pub trait ModelStore {
         c: &str,
     ) -> usize;
 
-    fn get_appeared_words(&self, model_name: &str, feature_name: &str) -> Option<&HashSet<String>>;
+    fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize;
 }
 
 // A in memory ModelStore implementation ModelHashMapStore
@@ -214,8 +206,7 @@ pub trait ModelStore {
 pub struct ModelHashMapStore {
     map: HashMap<String, usize>,
     class_map: HashMap<String, HashSet<String>>, // model_name to list of class
-    words_appeared_map: HashMap<String, HashSet<String>>, // model_name|feature_name to list of appeared words
-    word_count_map: HashMap<String, usize>, // a very large hash map for look up word counts
+    word_count_map: HashMap<String, usize>,      // a very large hash map for look up word counts
     words_in_class_count_map: HashMap<String, usize>, // a hash map for look up word counts for each feature and class
 }
 
@@ -237,7 +228,6 @@ impl ModelHashMapStore {
         ModelHashMapStore {
             map: HashMap::new(),
             class_map: HashMap::new(),
-            words_appeared_map: HashMap::new(),
             word_count_map: HashMap::new(),
             words_in_class_count_map: HashMap::new(),
         }
@@ -295,12 +285,24 @@ impl ModelStore for ModelHashMapStore {
         let word_count = self.word_count_map.entry(key).or_insert(0);
         *word_count += v;
 
-        // add this word with this feature as well, no matter which class it is
-        let word_set = self
-            .words_appeared_map
-            .entry(format!("{}|%{}", model_name, feature_name))
-            .or_insert(HashSet::new());
-        word_set.insert(word.to_string());
+        let is_new_word = 0 == self.map_get(
+            model_name,
+            &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+        );
+
+        if is_new_word {
+            // record the word in key and add count_unique_words_in_feature
+            self.map_add(
+                model_name,
+                &format!("unique_word_in_feature|%{}|%{}", feature_name, word),
+                1,
+            );
+            self.map_add(
+                model_name,
+                &format!("count_unique_words_in_feature|%{}", feature_name),
+                1,
+            );
+        }
     }
 
     fn get_count_of_word_in_class(
@@ -339,9 +341,11 @@ impl ModelStore for ModelHashMapStore {
             .unwrap_or_else(|| &0)
     }
 
-    fn get_appeared_words(&self, model_name: &str, feature_name: &str) -> Option<&HashSet<String>> {
-        self.words_appeared_map
-            .get(&format!("{}|%{}", model_name, feature_name))
+    fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize {
+        self.map_get(
+            model_name,
+            &format!("count_unique_words_in_feature|%{}", feature_name),
+        )
     }
 }
 
@@ -349,9 +353,10 @@ impl ModelStore for ModelHashMapStore {
 /// private util functions
 ///
 fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
-    let text = text.to_lowercase();
+    // let text = text.to_lowercase();
     let text = regex.replace_all(&text, " ");
 
+    let text = text.trim().to_lowercase();
     let words = text.split(" ");
 
     // words.iter().fold(HashMap::new(), |mut acc, w| {
@@ -368,15 +373,17 @@ fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
     return counts;
 }
 
-fn log_prob(count: usize, c_f_c: usize, c_c: usize, num_of_unique_word: usize) -> f64 {
+///
+/// v: count_of_unique_words_in_feature
+fn log_prob(count: usize, c_f_c: usize, c_c: usize, v: usize) -> f64 {
     let pseudo_count = 1.0;
 
     let count = count as f64;
     let c_f_c = c_f_c as f64;
     let c_c = c_c as f64;
-    let num_of_unique_word = num_of_unique_word as f64;
+    let v = v as f64;
 
-    count * ((c_f_c + pseudo_count).ln() - (c_c + num_of_unique_word * pseudo_count).ln())
+    count * ((c_f_c + pseudo_count).ln() - (c_c + v * pseudo_count).ln())
 }
 
 fn normalize(mut predictions: HashMap<String, f64>) -> HashMap<String, f64> {
@@ -417,6 +424,18 @@ fn normalize_works() {
     let mut map = HashMap::new();
     map.insert("a".to_owned(), 1.0);
     map.insert("b".to_owned(), 5.0);
+
+    let map = normalize(map);
+    assert_eq!(0.017986209962091555, *map.get("a").unwrap());
+    assert_eq!(0.9820137900379085, *map.get("b").unwrap());
+
+    // Noticing an interesting character for normalize:
+    // If you add same value onto the original values, the normalized result won't change.
+    // We utilize this character on prediction to allow log probability calculated also for those
+    // unknown words
+    let mut map = HashMap::new();
+    map.insert("a".to_owned(), 1.0 + 500.0);
+    map.insert("b".to_owned(), 5.0 + 500.0);
 
     let map = normalize(map);
     assert_eq!(0.017986209962091555, *map.get("a").unwrap());
