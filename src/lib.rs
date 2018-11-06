@@ -5,13 +5,15 @@ use std::collections::{HashMap, HashSet};
 
 ///
 #[derive(Debug)]
-pub struct Feature {
-    // setting `is_text` as true will considering this feature as a multinomial feature and do word counting on feature.value.
-    // setting `is_text` as true will considering this feature as categorical feature and will use feature.value as whole word with count 1
-    pub is_text: bool,
-
-    pub name: String,
-    pub value: String,
+pub enum Feature {
+    Text {
+        feature_name: String,
+        feature_value: String,
+    }, // a multinomial feature and do word counting on feature.value.
+    Category {
+        feature_name: String,
+        feature_value: String,
+    }, // categorical feature and will use feature.value as whole word with count 1
 }
 
 pub trait ModelStore {
@@ -47,41 +49,60 @@ impl<T: ModelStore> Model<T> {
             // let tmp_hash_set = HashSet::new();
 
             for feature in features {
-                let count_of_unique_words_in_feature =
-                    self.get_count_of_unique_words_in_feature(model_name, &feature.name);
+                match feature {
+                    Feature::Text {
+                        feature_name,
+                        feature_value,
+                    } => {
+                        let count_of_unique_words_in_feature =
+                            self.get_count_of_unique_words_in_feature(model_name, &feature_name);
 
-                let count_of_all_word_in_class =
-                    self.get_count_of_all_word_in_class(model_name, &feature.name, &outcome);
+                        let count_of_all_word_in_class = self.get_count_of_all_word_in_class(
+                            model_name,
+                            &feature_name,
+                            &outcome,
+                        );
 
-                // println!("{}:{}", &outcome, count_of_all_word_in_class);
+                        for (word, count) in count(&feature_value, &self.regex) {
+                            if self.is_word_appeared_in_feature(model_name, &feature_name, &word) {
+                                lp += self.cal_log_prob(
+                                    model_name,
+                                    &feature_name,
+                                    outcome,
+                                    count_of_unique_words_in_feature,
+                                    count_of_all_word_in_class,
+                                    count,
+                                    &word,
+                                )
+                            }
+                        }
+                    }
+                    Feature::Category {
+                        feature_name,
+                        feature_value,
+                    } => {
+                        let count_of_unique_words_in_feature =
+                            self.get_count_of_unique_words_in_feature(model_name, feature_name);
 
-                if feature.is_text {
-                    for (word, count) in count(&feature.value, &self.regex) {
-                        if self.is_word_appeared_in_feature(model_name, &feature.name, &word) {
+                        let count_of_all_word_in_class = self.get_count_of_all_word_in_class(
+                            model_name,
+                            &feature_name,
+                            &outcome,
+                        );
+                        if self.is_word_appeared_in_feature(model_name, feature_name, feature_value)
+                        {
                             lp += self.cal_log_prob(
                                 model_name,
-                                &feature.name,
+                                feature_name,
                                 outcome,
                                 count_of_unique_words_in_feature,
                                 count_of_all_word_in_class,
-                                count,
-                                &word,
+                                1,
+                                feature_value,
                             )
                         }
                     }
-                } else {
-                    if self.is_word_appeared_in_feature(model_name, &feature.name, &feature.value) {
-                        lp += self.cal_log_prob(
-                            model_name,
-                            &feature.name,
-                            outcome,
-                            count_of_unique_words_in_feature,
-                            count_of_all_word_in_class,
-                            1,
-                            &feature.value,
-                        )
-                    }
-                }
+                };
             }
 
             let final_log_p =
@@ -299,22 +320,14 @@ impl ModelStore for ModelHashMapStore {
 ///
 fn count(text: &str, regex: &Regex) -> HashMap<String, usize> {
     let text = regex.replace_all(&text, " ");
-
     let text = text.trim().to_lowercase();
-    let words = text.split(" ");
 
-    // words.iter().fold(HashMap::new(), |mut acc, w| {
-    //     *acc.entry(w.to_string()).or_insert(0) += 1; // seems a slow operation?
-    //     acc
-    // })
+    let counts = text.split(" ").fold(HashMap::new(), |mut acc, w| {
+        *acc.entry(w.to_string()).or_insert(0) += 1;
+        acc
+    });
 
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for word in words {
-        *counts.entry(word.to_owned()).or_insert(0) += 1;
-    }
-    // TODO: delete later
-    // counts.insert("good".to_owned(), 1);
-    return counts;
+    counts
 }
 
 /// c_f_c: count_of_word_in_class
