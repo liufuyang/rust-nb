@@ -13,6 +13,7 @@ script:
   - cargo test --examples
   - cargo run --example gaussian_mom
   - cargo run --example category_mom
+  - cargo run --example spam
 notifications:
   email:
     on_success: never
