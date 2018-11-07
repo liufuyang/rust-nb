@@ -2,6 +2,7 @@ extern crate regex;
 
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use std::f64::consts::PI;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -18,12 +19,13 @@ pub struct Feature {
 pub enum FeatureType {
     Text,     // a multinomial feature and do word counting on feature.value.
     Category, // categorical feature and will use feature.value as whole word with count 1
+    Gaussian, // gaussian feature
 }
 
 pub trait ModelStore {
-    fn map_add(&mut self, model_name: &str, prefix: &str, v: usize);
+    fn map_add(&mut self, model_name: &str, prefix: &str, v: f64) -> f64;
 
-    fn map_get(&self, model_name: &str, prefix: &str) -> usize;
+    fn map_get(&self, model_name: &str, prefix: &str) -> f64;
 
     fn save_class(&mut self, model_name: &str, class: &str);
 
@@ -56,8 +58,8 @@ impl<T: ModelStore> Model<T> {
     pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
         for (class, features) in class_feature_pairs {
             for f in features {
-                self.add_to_priors_count_of_class(model_name, &class, 1);
-                self.add_to_total_data_count(model_name, 1);
+                self.add_to_priors_count_of_class(model_name, &class, 1.0);
+                self.add_to_total_data_count(model_name, 1.0);
 
                 match f.feature_type {
                     FeatureType::Text => {
@@ -65,19 +67,30 @@ impl<T: ModelStore> Model<T> {
                         let word_counts = count(&feature_value, &self.stop_words);
                         for (word, count) in word_counts {
                             self.add_to_count_of_word_in_class(
-                                model_name, &f.name, &class, word, count,
+                                model_name,
+                                &f.name,
+                                &class,
+                                word,
+                                count as f64,
                             );
                             self.add_to_count_of_all_word_in_class(
-                                model_name, &f.name, &class, count,
+                                model_name,
+                                &f.name,
+                                &class,
+                                count as f64,
                             )
                         }
                     }
                     FeatureType::Category => {
                         self.add_to_count_of_word_in_class(
-                            model_name, &f.name, &class, &f.value, 1,
+                            model_name, &f.name, &class, &f.value, 1.0,
                         );
-                        self.add_to_count_of_all_word_in_class(model_name, &f.name, &class, 1)
+                        self.add_to_count_of_all_word_in_class(model_name, &f.name, &class, 1.0)
                     }
+                    FeatureType::Gaussian => match &f.value.parse::<f64>() {
+                        Ok(v) => self.gaussian_add(model_name, &f.name, &class, v.clone()),
+                        Err(_) => (),
+                    },
                 }
             }
         }
@@ -117,7 +130,7 @@ impl<T: ModelStore> Model<T> {
                                     outcome,
                                     count_of_unique_words_in_feature,
                                     count_of_all_word_in_class,
-                                    count,
+                                    count as f64,
                                     word,
                                 )
                             }
@@ -131,11 +144,18 @@ impl<T: ModelStore> Model<T> {
                                 outcome,
                                 count_of_unique_words_in_feature,
                                 count_of_all_word_in_class,
-                                1,
+                                1.0,
                                 &f.value,
                             )
                         }
                     }
+                    FeatureType::Gaussian => match &f.value.parse::<f64>() {
+                        Ok(v) => {
+                            lp +=
+                                self.cal_log_prob_gaussian(model_name, &f.name, &outcome, v.clone())
+                        }
+                        Err(_) => (),
+                    },
                 };
             }
 
@@ -147,22 +167,22 @@ impl<T: ModelStore> Model<T> {
         Some(normalize(result))
     }
 
-    fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: usize) {
+    fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: f64) {
         self.model_store
             .map_add(model_name, &format!("_Ncn|{}", c), v); // _Ncn: priors_count_of_class
 
         self.model_store.save_class(model_name, c);
     }
 
-    fn get_priors_count_of_class(&self, model_name: &str, c: &str) -> usize {
+    fn get_priors_count_of_class(&self, model_name: &str, c: &str) -> f64 {
         self.model_store.map_get(model_name, &format!("_Ncn|{}", c)) // _Ncn: priors_count_of_class
     }
 
-    fn add_to_total_data_count(&mut self, model_name: &str, v: usize) {
+    fn add_to_total_data_count(&mut self, model_name: &str, v: f64) {
         self.model_store.map_add(model_name, "_N", v); //_N: sum of all prior count N_cn of all classes c_n.
     }
 
-    fn get_total_data_count(&self, model_name: &str) -> usize {
+    fn get_total_data_count(&self, model_name: &str) -> f64 {
         self.model_store.map_get(model_name, "_N") //_N: sum of all prior count N_cn of all classes c_n.
     }
 
@@ -172,7 +192,7 @@ impl<T: ModelStore> Model<T> {
         feature_name: &str,
         c: &str,
         word: &str,
-        v: usize,
+        v: f64,
     ) {
         self.model_store.map_add(
             model_name,
@@ -189,7 +209,7 @@ impl<T: ModelStore> Model<T> {
         feature_name: &str,
         c: &str,
         word: &str,
-    ) -> usize {
+    ) -> f64 {
         self.model_store.map_get(
             model_name,
             &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
@@ -201,18 +221,13 @@ impl<T: ModelStore> Model<T> {
         model_name: &str,
         feature_name: &str,
         c: &str,
-        v: usize,
+        v: f64,
     ) {
         self.model_store
             .map_add(model_name, &format!("_c_c|{}|{}", feature_name, c), v);
     }
 
-    fn get_count_of_all_word_in_class(
-        &self,
-        model_name: &str,
-        feature_name: &str,
-        c: &str,
-    ) -> usize {
+    fn get_count_of_all_word_in_class(&self, model_name: &str, feature_name: &str, c: &str) -> f64 {
         self.model_store
             .map_get(model_name, &format!("_c_c|{}|{}", feature_name, c))
     }
@@ -222,10 +237,10 @@ impl<T: ModelStore> Model<T> {
             self.model_store.map_add(
                 model_name,
                 &format!("_Vw|{}|{}", feature_name, word), // _Vw: marker for unique word in feature
-                1,
+                1.0,
             );
             self.model_store
-                .map_add(model_name, &format!("_V|{}", feature_name), 1);
+                .map_add(model_name, &format!("_V|{}", feature_name), 1.0);
         }
     }
     fn is_word_appeared_in_feature(
@@ -236,21 +251,101 @@ impl<T: ModelStore> Model<T> {
     ) -> bool {
         0 != self
             .model_store
-            .map_get(model_name, &format!("_Vw|{}|{}", feature_name, word)) // _Vw: marker for unique word in feature
+            .map_get(model_name, &format!("_Vw|{}|{}", feature_name, word)) as usize // _Vw: marker for unique word in feature
     }
-    fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> usize {
+    fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> f64 {
         self.model_store
             .map_get(model_name, &format!("_V|{}", feature_name))
     }
+
+    ///
+    /// Gaussian session
+    ///
+    fn gaussian_add(&mut self, model_name: &str, feature_name: &str, outcome: &str, value: f64) {
+        //     count += 1
+        //     val delta = x - mean
+        //     mean += delta / count
+        //     val delta2 = x - mean
+        //     m2 += delta * delta2
+        let count = self.model_store.map_add(
+            model_name,
+            &format!("_G_count|{}|{}", feature_name, outcome),
+            1.0,
+        );
+
+        let mean = self
+            .model_store
+            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+        let delta = value - mean;
+
+        let mean = self.model_store.map_add(
+            model_name,
+            &format!("_G_mean|{}|{}", feature_name, outcome),
+            delta / count,
+        ); // mean += delta / count
+
+        let delta2 = value - mean;
+
+        self.model_store.map_add(
+            model_name,
+            &format!("_G_m2|{}|{}", feature_name, outcome),
+            delta * delta2,
+        );
+    }
+
+    fn cal_log_prob_gaussian(
+        &self,
+        model_name: &str,
+        feature_name: &str,
+        outcome: &str,
+        value: f64,
+    ) -> f64 {
+        // private fun logPropabilityOutcome(outcome: Outcome, value: Double): Double {
+        // // p(x|mu,sigma)        = 1/sqrt(2*pi*sigma^2)              * exp(-(x-mu)^2/(2*sigma^2))
+        // // log(p(x|mu, sigma)   = log(1) - log(sqrt(2*pi*sigma^2))  - (x-mu)^2/(2*sigma^2)
+        // //                      = -log(sqrt(2*pi*sigma^2))          - (x-mu)^2/(2*sigma^2)
+        // //                      = -log(sigma*sqrt(2*pi))            - (x-mu)^2/(2*sigma^2)
+        // //                      = -log(sigma) - log(sqrt(2*pi))     - (x-mu)^2/(2*sigma^2)
+        //     val (mu, sigma) = estimators[outcome] ?: return 0.0
+        //     if (sigma == 0.0) {
+        //         return 0.0
+        //     }
+        //     return -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
+        // }
+
+        let mu = self
+            .model_store
+            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+        let count = self.model_store.map_get(
+            model_name,
+            &format!("_G_count|{}|{}", feature_name, outcome),
+        );
+        let m2 = self
+            .model_store
+            .map_get(model_name, &format!("_G_m2|{}|{}", feature_name, outcome));
+
+        let mut sigma = 0.0;
+        if count >= 2.0 {
+            sigma = (m2 / (count - 1.0)).sqrt();
+        }
+        if sigma == 0.0 {
+            return 0.0;
+        }
+
+        // from Kotlin blayze code:
+        // -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
+        -sigma.ln() - (2.0 * PI).sqrt().ln() - (value - mu).powi(2) / (2.0 * sigma.powi(2))
+    }
+    /// end of Gaussian session
 
     fn cal_log_prob(
         &self,
         model_name: &str,
         feature_name: &str,
         outcome: &str,
-        count_of_unique_words_in_feature: usize, // |V|
-        count_of_all_word_in_class: usize,
-        count_of_word: usize,
+        count_of_unique_words_in_feature: f64, // |V|
+        count_of_all_word_in_class: f64,
+        count_of_word: f64,
         word: &str,
     ) -> f64 {
         let count_of_word_in_class =
@@ -269,7 +364,7 @@ impl<T: ModelStore> Model<T> {
 
 #[derive(Debug)]
 pub struct ModelHashMapStore {
-    map: HashMap<String, usize>,
+    map: HashMap<String, f64>,
     class_map: HashMap<String, HashSet<String>>, // model_name to list of class
 }
 
@@ -287,15 +382,16 @@ impl Model<ModelHashMapStore> {
 }
 
 impl ModelStore for ModelHashMapStore {
-    fn map_add(&mut self, model_name: &str, prefix: &str, v: usize) {
+    fn map_add(&mut self, model_name: &str, prefix: &str, v: f64) -> f64 {
         let key = format!("{}|{}", model_name, prefix);
-        let total_count = self.map.entry(key).or_insert(0);
+        let total_count = self.map.entry(key).or_insert(0.0);
         *total_count += v;
+        *total_count
     }
 
-    fn map_get(&self, model_name: &str, prefix: &str) -> usize {
+    fn map_get(&self, model_name: &str, prefix: &str) -> f64 {
         let key = format!("{}|{}", model_name, prefix);
-        *self.map.get(&key).unwrap_or_else(|| &0)
+        *self.map.get(&key).unwrap_or_else(|| &0.0)
     }
 
     fn save_class(&mut self, model_name: &str, class: &str) {
@@ -342,13 +438,8 @@ fn count<'a>(text: &'a str, stop_words: &Option<HashSet<String>>) -> HashMap<&'a
 /// c_f_c: count_of_word_in_class
 /// c_c:
 /// v: count_of_unique_words_in_feature
-fn log_prob(count: usize, c_f_c: usize, c_c: usize, v: usize) -> f64 {
+fn log_prob(count: f64, c_f_c: f64, c_c: f64, v: f64) -> f64 {
     let pseudo_count = 1.0;
-
-    let count = count as f64;
-    let c_f_c = c_f_c as f64;
-    let c_c = c_c as f64;
-    let v = v as f64;
 
     count * ((c_f_c + pseudo_count).ln() - (c_c + v * pseudo_count).ln())
 }
@@ -419,25 +510,34 @@ fn normalize_works() {
 #[test]
 fn model_hashmap_store_works() {
     let model = Model::new();
-    assert_eq!(0, model.get_total_data_count("test_model"));
+    assert_eq!(0, model.get_total_data_count("test_model") as usize);
     let mut model = model;
-    model.add_to_total_data_count("test_model", 1);
-    assert_eq!(1, model.get_total_data_count("test_model"));
-    model.add_to_total_data_count("test_model", 10);
-    assert_eq!(11, model.get_total_data_count("test_model"));
+    model.add_to_total_data_count("test_model", 1.0);
+    assert_eq!(1, model.get_total_data_count("test_model") as usize);
+    model.add_to_total_data_count("test_model", 10.0);
+    assert_eq!(11, model.get_total_data_count("test_model") as usize);
 }
 
 #[test]
 fn model_count_classes_works() {
     let model = Model::new();
-    assert_eq!(0, model.get_priors_count_of_class("test_model", "class_1"));
-    assert_eq!(0, model.get_priors_count_of_class("test_model", "class_2"));
+    assert_eq!(
+        0,
+        model.get_priors_count_of_class("test_model", "class_1") as usize
+    );
+    assert_eq!(
+        0,
+        model.get_priors_count_of_class("test_model", "class_2") as usize
+    );
     assert_eq!(None, model.model_store.get_all_classes("test_model"));
 
     let mut model = model;
 
-    model.add_to_priors_count_of_class("test_model", "class_1", 1);
-    assert_eq!(1, model.get_priors_count_of_class("test_model", "class_1"));
+    model.add_to_priors_count_of_class("test_model", "class_1", 1.0);
+    assert_eq!(
+        1,
+        model.get_priors_count_of_class("test_model", "class_1") as usize
+    );
     assert_eq!(
         1,
         model
@@ -447,8 +547,11 @@ fn model_count_classes_works() {
             .len()
     );
 
-    model.add_to_priors_count_of_class("test_model", "class_1", 10);
-    assert_eq!(11, model.get_priors_count_of_class("test_model", "class_1"));
+    model.add_to_priors_count_of_class("test_model", "class_1", 10.0);
+    assert_eq!(
+        11,
+        model.get_priors_count_of_class("test_model", "class_1") as usize
+    );
     assert_eq!(
         1,
         model
@@ -458,8 +561,11 @@ fn model_count_classes_works() {
             .len()
     );
 
-    model.add_to_priors_count_of_class("test_model", "class_2", 10);
-    assert_eq!(10, model.get_priors_count_of_class("test_model", "class_2"));
+    model.add_to_priors_count_of_class("test_model", "class_2", 10.0);
+    assert_eq!(
+        10,
+        model.get_priors_count_of_class("test_model", "class_2") as usize
+    );
     assert_eq!(
         2,
         model
@@ -469,8 +575,11 @@ fn model_count_classes_works() {
             .len()
     );
 
-    model.add_to_priors_count_of_class("test_model", "class_2", 10);
-    assert_eq!(20, model.get_priors_count_of_class("test_model", "class_2"));
+    model.add_to_priors_count_of_class("test_model", "class_2", 10.0);
+    assert_eq!(
+        20,
+        model.get_priors_count_of_class("test_model", "class_2") as usize
+    );
     assert_eq!(
         2,
         model
