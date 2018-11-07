@@ -127,6 +127,7 @@ fn main() {
             ],
         ),
     ];
+
     model.train("Mom's word to me before I go out", input_train);
 
     // test example 1
@@ -154,6 +155,12 @@ fn main() {
 
     println!("{:?}\n", result);
     assert!(result.get("wear more cloth").unwrap().abs() > 0.9);
+    // result will be:
+    // {
+    //     "take umbrella":0.06242401106172323,
+    //     "go play well":0.00000032854821646191724,
+    //     "wear more cloth":0.9375756603900602
+    // }
 
     // test example 2
     let result = model
@@ -180,6 +187,12 @@ fn main() {
 
     println!("{:?}\n", result);
     assert!(result.get("take umbrella").unwrap().abs() > 0.9);
+    // result will be:
+    // {
+    //     "take umbrella":0.9277325553119831,
+    //     "go play well":0.07226744468789072,
+    //     "wear more cloth":0.00000000000012621909863350682
+    // }
 
     // test example 3
     let result = model
@@ -205,4 +218,11 @@ fn main() {
         ).unwrap();
 
     println!("{:?}\n", result);
+    assert!(result.get("go play well").unwrap().abs() > 0.9);
+    // result will be:
+    // {
+    //     "wear more cloth":0.00000000000000007428571894758607,
+    //     "take umbrella":0.45590974640701326,
+    //     "go play well":0.5440902535929867
+    // }
 }
