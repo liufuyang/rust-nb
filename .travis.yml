@@ -11,6 +11,8 @@ branches:
 script:
   - cargo test
   - cargo test --examples
+  - cargo run --example gaussian_mom
+  - cargo run --example category_mom
 notifications:
   email:
     on_success: never
