@@ -218,7 +218,7 @@ fn main() {
         ).unwrap();
 
     println!("{:?}\n", result);
-    assert!(result.get("go play well").unwrap().abs() > 0.9);
+    assert!(result.get("go play well").unwrap().abs() > 0.5);
     // result will be:
     // {
     //     "wear more cloth":0.00000000000000007428571894758607,

@@ -137,17 +137,17 @@ mod rust_nb {
 
         println!("{:?}", result);
 
-        let mut pEUR = 0.0312254; // https://www.wolframalpha.com/input/?i=normalpdf(23.0,+30.0,+10.0)
-        let mut pUSD = 0.000446108; // https://www.wolframalpha.com/input/?i=normalpdf(23.0,+45.0,+7.0710678118654755)
+        let mut p_eur = 0.0312254; // https://www.wolframalpha.com/input/?i=normalpdf(23.0,+30.0,+10.0)
+        let mut p_usd = 0.000446108; // https://www.wolframalpha.com/input/?i=normalpdf(23.0,+45.0,+7.0710678118654755)
 
-        pUSD = pUSD * (2.0 / 5.0);
-        pEUR = pEUR * (3.0 / 5.0);
+        p_usd = p_usd * (2.0 / 5.0);
+        p_eur = p_eur * (3.0 / 5.0);
 
-        pUSD = pUSD / (pUSD + pEUR);
-        pEUR = 1.0 - pUSD;
+        p_usd = p_usd / (p_usd + p_eur);
+        p_eur = 1.0 - p_usd;
 
-        assert!((pUSD - *result.get("usd").unwrap()).abs() < 1e-6);
-        assert!((pEUR - *result.get("eur").unwrap()).abs() < 1e-6);
+        assert!((p_usd - *result.get("usd").unwrap()).abs() < 1e-6);
+        assert!((p_eur - *result.get("eur").unwrap()).abs() < 1e-6);
     }
 
 }
