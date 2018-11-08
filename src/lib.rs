@@ -350,12 +350,16 @@ impl<T: ModelStore + Sync> Model<T> {
             .model_store
             .map_get(model_name, &format!("_G_m2|{}|{}", feature_name, outcome));
 
-        let mut sigma = 0.0;
+        let mut sigma;
         if count >= 2.0 {
             sigma = (m2 / (count - 1.0)).sqrt();
+        } else {
+            sigma = 1.0; // simple assumption to make prediction work better even if only trained once
         }
-        if sigma == 0.0 {
-            return 0.0;
+        if sigma < 1.0 {
+            sigma = 1.0; // do not allow sigma smaller than ore, prevent over taken other features
+                         // when using Gaussian feature here, one should make the input larger than 1
+                         // different with blayze, where it lets function returns 0 if happens
         }
 
         // from Kotlin blayze code:

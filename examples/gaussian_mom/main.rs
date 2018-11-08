@@ -42,7 +42,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "5".to_owned(),
+                    value: "1".to_owned(),
                 },
             ],
         ),
@@ -62,7 +62,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "2".to_owned(),
+                    value: "3".to_owned(),
                 },
             ],
         ),
@@ -82,7 +82,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "2".to_owned(),
+                    value: "4".to_owned(),
                 },
             ],
         ),
@@ -102,7 +102,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "2".to_owned(),
+                    value: "3".to_owned(),
                 },
             ],
         ),
@@ -122,7 +122,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "2".to_owned(),
+                    value: "3".to_owned(),
                 },
             ],
         ),
@@ -156,9 +156,9 @@ fn main() {
     assert!(result.get("wear more cloth").unwrap().abs() > 0.9);
     // result will be:
     // {
-    //     "take umbrella":0.06242401106172323,
-    //     "go play well":0.00000032854821646191724,
-    //     "wear more cloth":0.9375756603900602
+    //     "wear more cloth": 0.9655852714584366,
+    //     "go play well": 0.0000033613494482027493,
+    //     "take umbrella": 0.03441136719211526
     // }
 
     // test example 2
@@ -184,12 +184,12 @@ fn main() {
     );
 
     println!("{:?}\n", result);
-    assert!(result.get("take umbrella").unwrap().abs() > 0.9);
+    assert!(result.get("take umbrella").unwrap().abs() > 0.8);
     // result will be:
     // {
-    //     "take umbrella":0.9277325553119831,
-    //     "go play well":0.07226744468789072,
-    //     "wear more cloth":0.00000000000012621909863350682
+    //     "go play well": 0.0035707854476099555,
+    //     "wear more cloth": 0.00000000000005651204952913297,
+    //     "take umbrella": 0.9964292145523336
     // }
 
     // test example 3
@@ -218,8 +218,8 @@ fn main() {
     assert!(result.get("go play well").unwrap().abs() > 0.5);
     // result will be:
     // {
-    //     "wear more cloth":0.00000000000000007428571894758607,
-    //     "take umbrella":0.45590974640701326,
-    //     "go play well":0.5440902535929867
+    //     "take umbrella": 0.294095527044516,
+    //     "wear more cloth": 0.00000000000000005430023183112072,
+    //     "go play well": 0.7059044729554839
     // }
 }
