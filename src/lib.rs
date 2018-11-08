@@ -1,7 +1,9 @@
+extern crate rayon;
 extern crate regex;
 #[macro_use]
 extern crate serde_derive;
 
+use rayon::prelude::*;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::f64::consts::PI;
@@ -9,15 +11,17 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
+use std::marker::Sync;
+
 ///
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feature {
     pub feature_type: FeatureType,
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeatureType {
     Text,     // a multinomial feature and do word counting on feature.value.
     Category, // categorical feature and will use feature.value as whole word with count 1
@@ -31,16 +35,16 @@ pub trait ModelStore {
 
     fn save_class(&mut self, model_name: &str, class: &str);
 
-    fn get_all_classes(&self, model_name: &str) -> Option<&HashSet<String>>;
+    fn get_all_classes(&self, model_name: &str) -> Option<HashSet<String>>;
 }
 
-pub struct Model<T: ModelStore> {
+pub struct Model<T: ModelStore + Sync> {
     model_store: T,
     regex: Regex, // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
 }
 
-impl<T: ModelStore> Model<T> {
+impl<T: ModelStore + Sync> Model<T> {
     pub fn with_stop_words_file(mut self, stop_words_file: &str) -> Self {
         let f = File::open(stop_words_file).unwrap();
         let f = BufReader::new(&f);
@@ -57,7 +61,7 @@ impl<T: ModelStore> Model<T> {
         self
     }
 
-    pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
+    pub fn train(&mut self, model_name: &str, class_feature_pairs: &Vec<(String, Vec<Feature>)>) {
         for (class, features) in class_feature_pairs {
             for f in features {
                 self.add_to_priors_count_of_class(model_name, &class, 1.0);
@@ -98,75 +102,94 @@ impl<T: ModelStore> Model<T> {
         }
     }
 
-    pub fn predict(
+    pub fn predict(&self, model_name: &str, features: &Vec<Feature>) -> HashMap<String, f64> {
+        self.predict_batch(&model_name, &vec![features]).remove(0)
+    }
+
+    pub fn predict_batch(
         &self,
         model_name: &str,
-        features: &Vec<Feature>,
-    ) -> Option<HashMap<String, f64>> {
-        let mut result = HashMap::new();
+        features_vec: &Vec<&Vec<Feature>>,
+    ) -> Vec<HashMap<String, f64>> {
+        let outcomes = match self.model_store.get_all_classes(model_name) {
+            Some(c) => c,
+            None => return vec![HashMap::new()],
+        };
 
-        let outcomes = self.model_store.get_all_classes(model_name)?;
+        let results: Vec<HashMap<String, f64>> = features_vec
+            .par_iter() // use rayon for predicting in parallel
+            .map(|features| {
+                let mut result = HashMap::new();
 
-        for outcome in outcomes {
-            let priors_count_of_class = self.get_priors_count_of_class(model_name, outcome);
-            let total_data_count = self.get_total_data_count(model_name);
+                for outcome in &outcomes {
+                    let priors_count_of_class =
+                        self.get_priors_count_of_class(model_name, &outcome);
+                    let total_data_count = self.get_total_data_count(model_name);
 
-            let mut lp = 0.0;
-            // let tmp_hash_set = HashSet::new();
+                    let mut lp = 0.0;
 
-            for f in features {
-                let count_of_unique_words_in_feature =
-                    self.get_count_of_unique_words_in_feature(model_name, &f.name);
+                    for f in *features {
+                        let count_of_unique_words_in_feature =
+                            self.get_count_of_unique_words_in_feature(model_name, &f.name);
 
-                let count_of_all_word_in_class =
-                    self.get_count_of_all_word_in_class(model_name, &f.name, &outcome);
+                        let count_of_all_word_in_class =
+                            self.get_count_of_all_word_in_class(model_name, &f.name, &outcome);
 
-                match f.feature_type {
-                    FeatureType::Text => {
-                        let feature_value = clean_text(&f.value, &self.regex);
-                        for (word, count) in count(&feature_value, &self.stop_words) {
-                            if self.is_word_appeared_in_feature(model_name, &f.name, &word) {
-                                lp += self.cal_log_prob(
-                                    model_name,
-                                    &f.name,
-                                    outcome,
-                                    count_of_unique_words_in_feature,
-                                    count_of_all_word_in_class,
-                                    count as f64,
-                                    word,
-                                )
+                        match f.feature_type {
+                            FeatureType::Text => {
+                                let feature_value = clean_text(&f.value, &self.regex);
+                                for (word, count) in count(&feature_value, &self.stop_words) {
+                                    if self.is_word_appeared_in_feature(model_name, &f.name, &word)
+                                    {
+                                        lp += self.cal_log_prob(
+                                            model_name,
+                                            &f.name,
+                                            &outcome,
+                                            count_of_unique_words_in_feature,
+                                            count_of_all_word_in_class,
+                                            count as f64,
+                                            word,
+                                        )
+                                    }
+                                }
                             }
-                        }
+                            FeatureType::Category => {
+                                if self.is_word_appeared_in_feature(model_name, &f.name, &f.value) {
+                                    lp += self.cal_log_prob(
+                                        model_name,
+                                        &f.name,
+                                        &outcome,
+                                        count_of_unique_words_in_feature,
+                                        count_of_all_word_in_class,
+                                        1.0,
+                                        &f.value,
+                                    )
+                                }
+                            }
+                            FeatureType::Gaussian => match &f.value.parse::<f64>() {
+                                Ok(v) => {
+                                    lp += self.cal_log_prob_gaussian(
+                                        model_name,
+                                        &f.name,
+                                        &outcome,
+                                        v.clone(),
+                                    )
+                                }
+                                Err(_) => (),
+                            },
+                        };
                     }
-                    FeatureType::Category => {
-                        if self.is_word_appeared_in_feature(model_name, &f.name, &f.value) {
-                            lp += self.cal_log_prob(
-                                model_name,
-                                &f.name,
-                                outcome,
-                                count_of_unique_words_in_feature,
-                                count_of_all_word_in_class,
-                                1.0,
-                                &f.value,
-                            )
-                        }
-                    }
-                    FeatureType::Gaussian => match &f.value.parse::<f64>() {
-                        Ok(v) => {
-                            lp +=
-                                self.cal_log_prob_gaussian(model_name, &f.name, &outcome, v.clone())
-                        }
-                        Err(_) => (),
-                    },
-                };
-            }
 
-            let final_log_p =
-                (priors_count_of_class as f64).ln() - (total_data_count as f64).ln() + lp;
-            result.insert(outcome.to_owned(), final_log_p);
-        }
+                    let final_log_p =
+                        (priors_count_of_class as f64).ln() - (total_data_count as f64).ln() + lp;
+                    result.insert(outcome.to_owned(), final_log_p);
+                }
 
-        Some(normalize(result))
+                normalize(result)
+            })
+            .collect();
+
+        results
     }
 
     fn add_to_priors_count_of_class(&mut self, model_name: &str, c: &str, v: f64) {
@@ -405,8 +428,8 @@ impl ModelStore for ModelHashMapStore {
         class_vec.insert(class.to_string());
     }
 
-    fn get_all_classes(&self, model_name: &str) -> Option<&HashSet<String>> {
-        self.class_map.get(model_name)
+    fn get_all_classes(&self, model_name: &str) -> Option<HashSet<String>> {
+        self.class_map.get(model_name).cloned()
     }
 }
 

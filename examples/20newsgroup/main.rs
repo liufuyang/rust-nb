@@ -1,7 +1,4 @@
-extern crate rayon;
 extern crate rust_nb;
-
-use rayon::prelude::*;
 
 use std::fs::File;
 use std::io::BufRead;
@@ -14,6 +11,8 @@ fn main() {
 
     let train_data = load_txt("examples/data/20newsgroup_train.txt");
     let test_data = load_txt("examples/data/20newsgroup_test.txt");
+    let (test_labels, test_features): (Vec<&str>, Vec<&Vec<Feature>>) =
+        test_data.iter().map(|(s, v)| (s.as_str(), v)).unzip();
 
     println!(
         "Train size: {}, test size: {}",
@@ -21,14 +20,17 @@ fn main() {
         test_data.len()
     );
 
-    model.train("20newsgroup_model", train_data);
-
+    model.train("20newsgroup_model", &train_data);
     println!("Training finished");
+    println!("{:?}", train_data);
 
-    let total_test_score: f64 = test_data
-        .par_iter()
-        .map(|(test_label, test_feature_v)| {
-            let predict = model.predict("20newsgroup_model", test_feature_v).unwrap();
+    let predicts = model.predict_batch("20newsgroup_model", &test_features);
+    println!("Testing finished");
+
+    let total_test_score: f64 = test_labels
+        .iter()
+        .zip(predicts.iter())
+        .map(|(test_label, predict)| {
             let (pred_label, _test_score) = predict
                 .iter()
                 .max_by(|(_ka, va), (_kb, vb)| va.partial_cmp(vb).unwrap())
@@ -38,7 +40,8 @@ fn main() {
             } else {
                 0.0
             }
-        }).sum();
+        })
+        .sum();
     let score = total_test_score / test_data.len() as f64;
 
     println!("test score: {}", score);
