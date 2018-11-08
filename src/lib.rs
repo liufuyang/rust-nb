@@ -1,4 +1,6 @@
 extern crate regex;
+#[macro_use]
+extern crate serde_derive;
 
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -8,14 +10,14 @@ use std::io::BufRead;
 use std::io::BufReader;
 
 ///
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Feature {
     pub feature_type: FeatureType,
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum FeatureType {
     Text,     // a multinomial feature and do word counting on feature.value.
     Category, // categorical feature and will use feature.value as whole word with count 1
