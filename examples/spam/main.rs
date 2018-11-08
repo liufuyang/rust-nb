@@ -72,7 +72,7 @@ fn main() {
                     value: "288".to_owned(),
                 },
             ],
-        ).unwrap();
+        );
 
     println!("{:?}\n", result);
     assert!(result.get("spam").unwrap().abs() > 0.9);
@@ -80,27 +80,26 @@ fn main() {
     // {"not spam": 0.04228956359881729, "spam": 0.9577104364011828}
 
     // test example 2
-    let result = model
-        .predict(
-            "Spam checker",
-            &vec![
-                Feature {
-                    feature_type: FeatureType::Text,
-                    name: "email.body".to_owned(),
-                    value: "Hey bro, hotpot again?".to_owned(),
-                },
-                Feature {
-                    feature_type: FeatureType::Category,
-                    name: "email.domain".to_owned(),
-                    value: "gmail.com".to_owned(),
-                },
-                Feature {
-                    feature_type: FeatureType::Gaussian,
-                    name: "email.n_words".to_owned(),
-                    value: "10".to_owned(),
-                },
-            ],
-        ).unwrap();
+    let result = model.predict(
+        "Spam checker",
+        &vec![
+            Feature {
+                feature_type: FeatureType::Text,
+                name: "email.body".to_owned(),
+                value: "Hey bro, hotpot again?".to_owned(),
+            },
+            Feature {
+                feature_type: FeatureType::Category,
+                name: "email.domain".to_owned(),
+                value: "gmail.com".to_owned(),
+            },
+            Feature {
+                feature_type: FeatureType::Gaussian,
+                name: "email.n_words".to_owned(),
+                value: "10".to_owned(),
+            },
+        ],
+    );
 
     println!("{:?}\n", result);
     assert!(result.get("not spam").unwrap().abs() > 0.9);
