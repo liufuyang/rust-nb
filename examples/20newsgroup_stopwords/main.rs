@@ -11,13 +11,13 @@ fn main() {
 
     let train_data = load_txt("examples/data/20newsgroup_train.txt");
     let test_data = load_txt("examples/data/20newsgroup_test.txt");
-    let (test_labels, test_features): (Vec<&str>, Vec<&Vec<Feature>>) =
-        test_data.iter().map(|(s, v)| (s.as_str(), v)).unzip();
+    let (test_labels, test_features): (Vec<String>, Vec<Vec<Feature>>) =
+        test_data.into_iter().map(|(s, v)| (s, v)).unzip();
 
     println!(
         "Train size: {}, test size: {}",
         train_data.len(),
-        test_data.len()
+        test_labels.len()
     );
 
     model.train("20newsgroup_model", &train_data);
@@ -41,7 +41,7 @@ fn main() {
             }
         })
         .sum();
-    let score = total_test_score / test_data.len() as f64;
+    let score = total_test_score / test_labels.len() as f64;
 
     println!("test score: {}", score);
     assert!((0.6456452469463622 - score).abs() < 1e-10);

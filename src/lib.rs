@@ -103,13 +103,14 @@ impl<T: ModelStore + Sync> Model<T> {
     }
 
     pub fn predict(&self, model_name: &str, features: &Vec<Feature>) -> HashMap<String, f64> {
-        self.predict_batch(&model_name, &vec![features]).remove(0)
+        self.predict_batch(&model_name, &vec![features.clone()])
+            .remove(0)
     }
 
     pub fn predict_batch(
         &self,
         model_name: &str,
-        features_vec: &Vec<&Vec<Feature>>,
+        features_vec: &Vec<Vec<Feature>>,
     ) -> Vec<HashMap<String, f64>> {
         let outcomes = match self.model_store.get_all_classes(model_name) {
             Some(c) => c,
@@ -128,7 +129,7 @@ impl<T: ModelStore + Sync> Model<T> {
 
                     let mut lp = 0.0;
 
-                    for f in *features {
+                    for f in features {
                         let count_of_unique_words_in_feature =
                             self.get_count_of_unique_words_in_feature(model_name, &f.name);
 
