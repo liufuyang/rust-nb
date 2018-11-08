@@ -24,7 +24,7 @@ mod rust_nb {
                 }],
             ),
         ];
-        model.train("test_model", input_train);
+        model.train("test_model", &input_train);
 
         let input_test = vec![Feature {
             feature_type: FeatureType::Text,
@@ -67,7 +67,7 @@ mod rust_nb {
                 }],
             ),
         ];
-        model.train("test_model", input_train);
+        model.train("test_model", &input_train);
 
         let input_test = vec![Feature {
             feature_type: FeatureType::Text,
@@ -126,7 +126,7 @@ mod rust_nb {
                 }],
             ),
         ];
-        model.train("test_model", input_train);
+        model.train("test_model", &input_train);
 
         let input_test = vec![Feature {
             feature_type: FeatureType::Gaussian,

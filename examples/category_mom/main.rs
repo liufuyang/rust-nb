@@ -55,7 +55,7 @@ fn main() {
             }],
         ),
     ];
-    model.train("Mom's word to me before I go out", input_train);
+    model.train("Mom's word to me before I go out", &input_train);
 
     // note: model is trained only with "weather.title" as a category feature,
     // the following prediction test only will take account the "weather.title" feature in the input

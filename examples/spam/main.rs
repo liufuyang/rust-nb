@@ -48,31 +48,30 @@ fn main() {
         ),
     ];
 
-    model.train("Spam checker", input_train);
+    model.train("Spam checker", &input_train);
 
     // test example 1
-    let result = model
-        .predict(
-            "Spam checker",
-            &vec![
-                Feature {
-                    feature_type: FeatureType::Text,
-                    name: "email.body".to_owned(),
-                    value: "Hey bro, This is Secretary to president want to give you some money. Please give me your credit card number ..."
-                        .to_owned(),
-                },
-                Feature {
-                    feature_type: FeatureType::Category,
-                    name: "email.domain".to_owned(),
-                    value: "example.com".to_owned(),
-                },
-                Feature {
-                    feature_type: FeatureType::Gaussian,
-                    name: "email.n_words".to_owned(),
-                    value: "288".to_owned(),
-                },
-            ],
-        );
+    let result = model.predict(
+        "Spam checker",
+        &vec![
+            Feature {
+                feature_type: FeatureType::Text,
+                name: "email.body".to_owned(),
+                value: "Hey bro, This is Secretary to president want to give you some money. Please give me your credit card number ..."
+                    .to_owned(),
+            },
+            Feature {
+                feature_type: FeatureType::Category,
+                name: "email.domain".to_owned(),
+                value: "example.com".to_owned(),
+            },
+            Feature {
+                feature_type: FeatureType::Gaussian,
+                name: "email.n_words".to_owned(),
+                value: "288".to_owned(),
+            },
+        ],
+    );
 
     println!("{:?}\n", result);
     assert!(result.get("spam").unwrap().abs() > 0.9);

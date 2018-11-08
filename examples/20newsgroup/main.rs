@@ -20,8 +20,9 @@ fn main() {
         test_data.len()
     );
 
-    model.train("20newsgroup_model", train_data);
+    model.train("20newsgroup_model", &train_data);
     println!("Training finished");
+    println!("{:?}", train_data);
 
     let predicts = model.predict_batch("20newsgroup_model", &test_features);
     println!("Testing finished");

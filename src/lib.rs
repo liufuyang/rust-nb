@@ -61,7 +61,7 @@ impl<T: ModelStore + Sync> Model<T> {
         self
     }
 
-    pub fn train(&mut self, model_name: &str, class_feature_pairs: Vec<(String, Vec<Feature>)>) {
+    pub fn train(&mut self, model_name: &str, class_feature_pairs: &Vec<(String, Vec<Feature>)>) {
         for (class, features) in class_feature_pairs {
             for f in features {
                 self.add_to_priors_count_of_class(model_name, &class, 1.0);

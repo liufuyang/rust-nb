@@ -128,7 +128,7 @@ fn main() {
         ),
     ];
 
-    model.train("Mom's word to me before I go out", input_train);
+    model.train("Mom's word to me before I go out", &input_train);
 
     // test example 1
     let result = model.predict(
