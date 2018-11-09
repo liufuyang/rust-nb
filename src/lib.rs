@@ -5,7 +5,7 @@ extern crate serde_derive;
 
 use rayon::prelude::*;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::consts::PI;
 use std::fs::File;
 use std::io::BufRead;
@@ -31,14 +31,18 @@ pub enum FeatureType {
 pub trait ModelStore {
     fn map_add(&mut self, model_name: &str, prefix: &str, v: f64) -> f64;
 
+    fn map_add_with_default(&mut self, model_name: &str, prefix: &str, v: f64, default: f64)
+        -> f64;
+
     fn map_get(&self, model_name: &str, prefix: &str) -> f64;
 
     fn save_class(&mut self, model_name: &str, class: &str);
 
-    fn get_all_classes(&self, model_name: &str) -> Option<HashSet<String>>;
+    fn get_all_classes(&self, model_name: &str) -> Option<BTreeSet<String>>;
 }
 
 pub struct Model<T: ModelStore + Sync> {
+    default_gaussian_m2: f64, // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
     model_store: T,
     regex: Regex, // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
@@ -58,6 +62,11 @@ impl<T: ModelStore + Sync> Model<T> {
 
         self.stop_words = Some(stop_words);
 
+        self
+    }
+
+    pub fn with_default_gaussian_m2(mut self, default_gaussian_m2: f64) -> Self {
+        self.default_gaussian_m2 = default_gaussian_m2;
         self
     }
 
@@ -312,10 +321,11 @@ impl<T: ModelStore + Sync> Model<T> {
 
         let delta2 = value - mean;
 
-        self.model_store.map_add(
+        self.model_store.map_add_with_default(
             model_name,
             &format!("_G_m2|{}|{}", feature_name, outcome),
             delta * delta2,
+            self.default_gaussian_m2, // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
         );
     }
 
@@ -395,7 +405,7 @@ impl<T: ModelStore + Sync> Model<T> {
 #[derive(Debug)]
 pub struct ModelHashMapStore {
     map: HashMap<String, f64>,
-    class_map: HashMap<String, HashSet<String>>, // model_name to list of class
+    class_map: HashMap<String, BTreeSet<String>>, // model_name to list of class
 }
 
 impl Model<ModelHashMapStore> {
@@ -407,16 +417,27 @@ impl Model<ModelHashMapStore> {
             },
             regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
             stop_words: None,
+            default_gaussian_m2: 0.0,
         }
     }
 }
 
 impl ModelStore for ModelHashMapStore {
     fn map_add(&mut self, model_name: &str, prefix: &str, v: f64) -> f64 {
+        self.map_add_with_default(model_name, prefix, v, 0.0)
+    }
+
+    fn map_add_with_default(
+        &mut self,
+        model_name: &str,
+        prefix: &str,
+        v: f64,
+        default: f64,
+    ) -> f64 {
         let key = format!("{}|{}", model_name, prefix);
-        let total_count = self.map.entry(key).or_insert(0.0);
-        *total_count += v;
-        *total_count
+        let old_value = self.map.entry(key).or_insert(default);
+        *old_value += v;
+        *old_value
     }
 
     fn map_get(&self, model_name: &str, prefix: &str) -> f64 {
@@ -429,11 +450,11 @@ impl ModelStore for ModelHashMapStore {
         let class_vec = self
             .class_map
             .entry(model_name.to_string())
-            .or_insert(HashSet::new());
+            .or_insert(BTreeSet::new());
         class_vec.insert(class.to_string());
     }
 
-    fn get_all_classes(&self, model_name: &str) -> Option<HashSet<String>> {
+    fn get_all_classes(&self, model_name: &str) -> Option<BTreeSet<String>> {
         self.class_map.get(model_name).cloned()
     }
 }

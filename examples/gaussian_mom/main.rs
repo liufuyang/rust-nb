@@ -3,7 +3,7 @@ extern crate rust_nb;
 use rust_nb::{Feature, FeatureType, Model};
 
 fn main() {
-    let mut model = Model::new();
+    let mut model = Model::new().with_default_gaussian_m2(100.0);
 
     let input_train = vec![
         (
@@ -72,7 +72,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.degree".to_owned(),
-                    value: "20".to_owned(),
+                    value: "25".to_owned(),
                 },
                 Feature {
                     feature_type: FeatureType::Category,
@@ -153,7 +153,7 @@ fn main() {
     );
 
     println!("{:?}\n", result);
-    assert!(result.get("wear more cloth").unwrap().abs() > 0.9);
+    assert!(result.get("wear more cloth").unwrap().abs() > 0.7);
     // result will be:
     // {
     //     "wear more cloth": 0.9655852714584366,
@@ -168,7 +168,7 @@ fn main() {
             Feature {
                 feature_type: FeatureType::Gaussian,
                 name: "weather.degree".to_owned(),
-                value: "22".to_owned(),
+                value: "28".to_owned(),
             },
             Feature {
                 feature_type: FeatureType::Category,
@@ -184,7 +184,7 @@ fn main() {
     );
 
     println!("{:?}\n", result);
-    assert!(result.get("take umbrella").unwrap().abs() > 0.8);
+    assert!(result.get("take umbrella").unwrap().abs() > 0.6);
     // result will be:
     // {
     //     "go play well": 0.0035707854476099555,
