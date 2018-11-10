@@ -126,16 +126,22 @@ impl<T: ModelStore + Sync> Model<T> {
             None => return vec![HashMap::new()],
         };
 
+        let total_data_count = self.get_total_data_count(model_name);
+
+        let outcomes_to_priors_counts: Vec<(String, f64)> = outcomes
+            .into_iter()
+            .map(|outcome| {
+                let priors_count_of_class = self.get_priors_count_of_class(model_name, &outcome);
+                (outcome, priors_count_of_class)
+            })
+            .collect();
+
         let results: Vec<HashMap<String, f64>> = features_vec
             .par_iter() // use rayon for predicting in parallel
             .map(|features| {
                 let mut result = HashMap::new();
 
-                for outcome in &outcomes {
-                    let priors_count_of_class =
-                        self.get_priors_count_of_class(model_name, &outcome);
-                    let total_data_count = self.get_total_data_count(model_name);
-
+                for (outcome, priors_count_of_class) in &outcomes_to_priors_counts {
                     let mut lp = 0.0;
 
                     for f in features {
@@ -190,8 +196,7 @@ impl<T: ModelStore + Sync> Model<T> {
                         };
                     }
 
-                    let final_log_p =
-                        (priors_count_of_class as f64).ln() - (total_data_count as f64).ln() + lp;
+                    let final_log_p = (priors_count_of_class).ln() - (total_data_count).ln() + lp;
                     result.insert(outcome.to_owned(), final_log_p);
                 }
 
@@ -470,19 +475,16 @@ fn clean_text(text: &str, regex: &Regex) -> String {
 }
 
 fn count<'a>(text: &'a str, stop_words: &Option<HashSet<String>>) -> HashMap<&'a str, usize> {
-    let texts: Vec<&str> = match stop_words {
-        Some(stop_words_set) => text
-            .split(" ")
-            .filter(|w| !stop_words_set.contains(*w))
-            .collect(),
-        None => text.split(" ").collect(),
-    };
-
-    let counts = texts.iter().fold(HashMap::new(), |mut acc, w| {
-        *acc.entry(*w).or_insert(0) += 1;
-        acc
-    });
-
+    let counts = text
+        .split(" ")
+        .filter(|w| match stop_words {
+            Some(stop_words_set) => !stop_words_set.contains(*w),
+            None => true,
+        })
+        .fold(HashMap::new(), |mut acc, w| {
+            *acc.entry(w).or_insert(0) += 1;
+            acc
+        });
     counts
 }
 
