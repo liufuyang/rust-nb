@@ -23,9 +23,28 @@ pub struct Feature {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeatureType {
-    Text,     // a multinomial feature and do word counting on feature.value.
-    Category, // categorical feature and will use feature.value as whole word with count 1
-    Gaussian, // gaussian feature
+    /// A multinomial feature and do word counting on feature.value.
+    Text,
+
+    /// A categorical feature and will use feature.value as whole word with count 1
+    Category,
+
+    /// A gaussian feature that can take in continues values (f.g. 1.0, 4.2).
+    /// It is calculated as an proximate gaussian distribution, with sigma calculated simply via
+    /// (max - min) * default_gaussian_sigma_factor, with default_gaussian_sigma_factor as 1.0/6.0 by default
+    /// and the sigma is always the same for the same Gaussian feature that is among different classes.
+    /// Use this features in case you have other features such as Text or Category at the same time.
+    /// Comparing with GaussianStd type below, this feature is more stable and practically more useful.
+    /// Noticing that this Gaussian will be heavily influenced by prior prob if you have very unbalanced
+    /// classes in training time.
+    Gaussian,
+
+    /// A standard gaussian feature that can take in continues values (f.g. 1.0, 4.2).
+    /// Sigma is calculated based on the known values of this feature of a certain class.
+    /// Be sure your input is really (or very close) to a gaussian
+    /// distribution otherwise this feature might easily dominate other features.
+    /// If you are not sure, use the `Gaussian` type above.
+    GaussianStd,
 }
 
 pub trait ModelStore {
@@ -42,9 +61,12 @@ pub trait ModelStore {
 }
 
 pub struct Model<T: ModelStore + Sync> {
-    default_gaussian_m2: f64, // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
+    // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
+    default_gaussian_m2: f64,
+    default_gaussian_sigma_factor: f64,
     model_store: T,
-    regex: Regex, // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
+    regex: Regex,
+    // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
 }
 
@@ -70,7 +92,7 @@ impl<T: ModelStore + Sync> Model<T> {
         self
     }
 
-    pub fn train(&mut self, model_name: &str, class_feature_pairs: &Vec<(String, Vec<Feature>)>) {
+    pub fn train(&mut self, model_name: &str, class_feature_pairs: &[(String, Vec<Feature>)]) {
         for (class, features) in class_feature_pairs {
             for f in features {
                 self.add_to_priors_count_of_class(model_name, &class, 1.0);
@@ -102,6 +124,10 @@ impl<T: ModelStore + Sync> Model<T> {
                         );
                         self.add_to_count_of_all_word_in_class(model_name, &f.name, &class, 1.0)
                     }
+                    FeatureType::GaussianStd => match &f.value.parse::<f64>() {
+                        Ok(v) => self.gaussian_std_add(model_name, &f.name, &class, v.clone()),
+                        Err(_) => (),
+                    },
                     FeatureType::Gaussian => match &f.value.parse::<f64>() {
                         Ok(v) => self.gaussian_add(model_name, &f.name, &class, v.clone()),
                         Err(_) => (),
@@ -111,15 +137,15 @@ impl<T: ModelStore + Sync> Model<T> {
         }
     }
 
-    pub fn predict(&self, model_name: &str, features: &Vec<Feature>) -> HashMap<String, f64> {
-        self.predict_batch(&model_name, &vec![features.clone()])
+    pub fn predict(&self, model_name: &str, features: &[Feature]) -> HashMap<String, f64> {
+        self.predict_batch(&model_name, &[Vec::from(features)])
             .remove(0)
     }
 
     pub fn predict_batch(
         &self,
         model_name: &str,
-        features_vec: &Vec<Vec<Feature>>,
+        features_vec: &[Vec<Feature>],
     ) -> Vec<HashMap<String, f64>> {
         let outcomes = match self.model_store.get_all_classes(model_name) {
             Some(c) => c,
@@ -182,6 +208,17 @@ impl<T: ModelStore + Sync> Model<T> {
                                     )
                                 }
                             }
+                            FeatureType::GaussianStd => match &f.value.parse::<f64>() {
+                                Ok(v) => {
+                                    lp += self.cal_log_prob_gaussian_std(
+                                        model_name,
+                                        &f.name,
+                                        &outcome,
+                                        v.clone(),
+                                    )
+                                }
+                                Err(_) => (),
+                            },
                             FeatureType::Gaussian => match &f.value.parse::<f64>() {
                                 Ok(v) => {
                                     lp += self.cal_log_prob_gaussian(
@@ -299,9 +336,15 @@ impl<T: ModelStore + Sync> Model<T> {
     }
 
     ///
-    /// Gaussian session
+    /// GaussianStd session
     ///
-    fn gaussian_add(&mut self, model_name: &str, feature_name: &str, outcome: &str, value: f64) {
+    fn gaussian_std_add(
+        &mut self,
+        model_name: &str,
+        feature_name: &str,
+        outcome: &str,
+        value: f64,
+    ) {
         //     count += 1
         //     val delta = x - mean
         //     mean += delta / count
@@ -309,18 +352,19 @@ impl<T: ModelStore + Sync> Model<T> {
         //     m2 += delta * delta2
         let count = self.model_store.map_add(
             model_name,
-            &format!("_G_count|{}|{}", feature_name, outcome),
+            &format!("_Gstd_count|{}|{}", feature_name, outcome),
             1.0,
         );
 
-        let mean = self
-            .model_store
-            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+        let mean = self.model_store.map_get(
+            model_name,
+            &format!("_Gstd_mean|{}|{}", feature_name, outcome),
+        );
         let delta = value - mean;
 
         let mean = self.model_store.map_add(
             model_name,
-            &format!("_G_mean|{}|{}", feature_name, outcome),
+            &format!("_Gstd_mean|{}|{}", feature_name, outcome),
             delta / count,
         ); // mean += delta / count
 
@@ -328,13 +372,13 @@ impl<T: ModelStore + Sync> Model<T> {
 
         self.model_store.map_add_with_default(
             model_name,
-            &format!("_G_m2|{}|{}", feature_name, outcome),
+            &format!("_Gstd_m2|{}|{}", feature_name, outcome),
             delta * delta2,
             self.default_gaussian_m2, // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
         );
     }
 
-    fn cal_log_prob_gaussian(
+    fn cal_log_prob_gaussian_std(
         &self,
         model_name: &str,
         feature_name: &str,
@@ -354,16 +398,18 @@ impl<T: ModelStore + Sync> Model<T> {
         //     return -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
         // }
 
-        let mu = self
-            .model_store
-            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+        let mu = self.model_store.map_get(
+            model_name,
+            &format!("_Gstd_mean|{}|{}", feature_name, outcome),
+        );
         let count = self.model_store.map_get(
             model_name,
-            &format!("_G_count|{}|{}", feature_name, outcome),
+            &format!("_Gstd_count|{}|{}", feature_name, outcome),
         );
-        let m2 = self
-            .model_store
-            .map_get(model_name, &format!("_G_m2|{}|{}", feature_name, outcome));
+        let m2 = self.model_store.map_get(
+            model_name,
+            &format!("_Gstd_m2|{}|{}", feature_name, outcome),
+        );
 
         let mut sigma;
         if count >= 2.0 {
@@ -379,7 +425,79 @@ impl<T: ModelStore + Sync> Model<T> {
 
         // from Kotlin blayze code:
         // -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
-        -sigma.ln() - (2.0 * PI).sqrt().ln() - (value - mu).powi(2) / (2.0 * sigma.powi(2))
+        // switch the last part, google "-log(1+x**2), -(x**2)" to see difference
+        -sigma.ln() - (2.0 * PI).sqrt().ln() - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
+    }
+    /// end of GaussianStd session
+
+    ///
+    /// Gaussian session
+    ///
+    fn gaussian_add(&mut self, model_name: &str, feature_name: &str, outcome: &str, value: f64) {
+        //     count += 1
+        //     val delta = x - mean
+        //     mean += delta / count
+        //     sigma = (max - min) / 6
+        let count = self.model_store.map_add(
+            model_name,
+            &format!("_G_count|{}|{}", feature_name, outcome),
+            1.0,
+        );
+
+        let mean = self
+            .model_store
+            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+        let delta = value - mean;
+
+        self.model_store.map_add(
+            model_name,
+            &format!("_G_mean|{}|{}", feature_name, outcome),
+            delta / count,
+        ); // mean += delta / count
+
+        // add max
+        let max = self
+            .model_store
+            .map_get(model_name, &format!("_G_max|{}", feature_name));
+        if value > max {
+            self.model_store
+                .map_add(model_name, &format!("_G_max|{}", feature_name), value - max);
+        }
+
+        // add min
+        let min = self
+            .model_store
+            .map_get(model_name, &format!("_G_min|{}", feature_name));
+        if value < min {
+            self.model_store
+                .map_add(model_name, &format!("_G_min|{}", feature_name), value - min);
+        }
+    }
+
+    fn cal_log_prob_gaussian(
+        &self,
+        model_name: &str,
+        feature_name: &str,
+        outcome: &str,
+        value: f64,
+    ) -> f64 {
+        let mu = self
+            .model_store
+            .map_get(model_name, &format!("_G_mean|{}|{}", feature_name, outcome));
+
+        let max = self
+            .model_store
+            .map_get(model_name, &format!("_G_max|{}", feature_name));
+        let min = self
+            .model_store
+            .map_get(model_name, &format!("_G_min|{}", feature_name));
+
+        let sigma = ((max - min) * self.default_gaussian_sigma_factor).max(1e-3);
+
+        // from Kotlin blayze code:
+        // -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
+        // switch the last part, google "-log(1+x**2), -(x**2)" to see difference
+        -sigma.ln() - (2.0 * PI).sqrt().ln() - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
     }
     /// end of Gaussian session
 
@@ -423,6 +541,7 @@ impl Model<ModelHashMapStore> {
             regex: Regex::new(r"[^a-zA-Z]+").unwrap(), // only keep any kind of letter from any language, others become space
             stop_words: None,
             default_gaussian_m2: 0.0,
+            default_gaussian_sigma_factor: 1.0 / 6.0,
         }
     }
 }

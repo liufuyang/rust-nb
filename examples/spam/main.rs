@@ -76,7 +76,7 @@ fn main() {
     println!("{:?}\n", result);
     assert!(result.get("spam").unwrap().abs() > 0.9);
     // result will be:
-    // {"not spam": 0.04228956359881729, "spam": 0.9577104364011828}
+    // {"not spam": 0.02950007253794831, "spam": 0.9704999274620517}
 
     // test example 2
     let result = model.predict(
@@ -103,5 +103,5 @@ fn main() {
     println!("{:?}\n", result);
     assert!(result.get("not spam").unwrap().abs() > 0.9);
     // result will be:
-    // {"spam": 0.03786816269284711, "not spam": 0.9621318373071529}
+    // {"not spam": 0.9976790459980525, "spam": 0.002320954001947624}
 }

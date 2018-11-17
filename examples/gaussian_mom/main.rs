@@ -22,7 +22,7 @@ fn main() {
                 Feature {
                     feature_type: FeatureType::Gaussian,
                     name: "weather.wind.level".to_owned(),
-                    value: "2".to_owned(),
+                    value: "3".to_owned(),
                 },
             ],
         ),
@@ -155,11 +155,7 @@ fn main() {
     println!("{:?}\n", result);
     assert!(result.get("wear more cloth").unwrap().abs() > 0.7);
     // result will be:
-    // {
-    //     "wear more cloth": 0.9655852714584366,
-    //     "go play well": 0.0000033613494482027493,
-    //     "take umbrella": 0.03441136719211526
-    // }
+    // {"wear more cloth": 0.8145285759525068, "go play well": 0.1310511820033621, "take umbrella": 0.05442024204413106}
 
     // test example 2
     let result = model.predict(
@@ -186,11 +182,7 @@ fn main() {
     println!("{:?}\n", result);
     assert!(result.get("take umbrella").unwrap().abs() > 0.6);
     // result will be:
-    // {
-    //     "go play well": 0.0035707854476099555,
-    //     "wear more cloth": 0.00000000000005651204952913297,
-    //     "take umbrella": 0.9964292145523336
-    // }
+    // {"wear more cloth": 0.040777064361781155, "take umbrella": 0.6929647650603867, "go play well": 0.2662581705778321}
 
     // test example 3
     let result = model.predict(
@@ -217,9 +209,5 @@ fn main() {
     println!("{:?}\n", result);
     assert!(result.get("go play well").unwrap().abs() > 0.5);
     // result will be:
-    // {
-    //     "take umbrella": 0.294095527044516,
-    //     "wear more cloth": 0.00000000000000005430023183112072,
-    //     "go play well": 0.7059044729554839
-    // }
+    // {"go play well": 0.6267604626518958, "wear more cloth": 0.14149599917558417, "take umbrella": 0.23174353817252016}
 }
