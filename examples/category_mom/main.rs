@@ -133,6 +133,6 @@ fn main() {
     );
 
     println!("{:?}\n", result);
-    assert!(result.get("wear more cloth").unwrap().abs() >= 0.4);
-    assert!(result.get("go play well").unwrap().abs() >= 0.4);
+    assert!(result.get("wear more cloth").unwrap().abs() >= 0.3999);
+    assert!(result.get("go play well").unwrap().abs() >= 0.3999);
 }
