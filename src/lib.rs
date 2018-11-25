@@ -104,6 +104,14 @@ impl<T: ModelStore + Sync> Model<T> {
         self
     }
 
+    pub fn with_default_gaussian_sigma_factor(
+        mut self,
+        default_gaussian_sigma_factor: f64,
+    ) -> Self {
+        self.default_gaussian_sigma_factor = default_gaussian_sigma_factor;
+        self
+    }
+
     pub fn train(&mut self, model_name: &str, class_feature_pairs: &[(String, Vec<Feature>)]) {
         for (class, features) in class_feature_pairs {
             for f in features {
@@ -138,11 +146,23 @@ impl<T: ModelStore + Sync> Model<T> {
                     }
                     FeatureType::GaussianStd => match &f.value.parse::<f64>() {
                         Ok(v) => self.gaussian_std_add(model_name, &f.name, &class, v.clone()),
-                        Err(_) => (),
+                        Err(e) => {
+                            println!(
+                                "FeatureType::GaussianStd parsing '{}' gives an error: {}. ",
+                                &f.value, e,
+                            );
+                            ()
+                        }
                     },
                     FeatureType::Gaussian => match &f.value.parse::<f64>() {
                         Ok(v) => self.gaussian_add(model_name, &f.name, &class, v.clone()),
-                        Err(_) => (),
+                        Err(e) => {
+                            println!(
+                                "FeatureType::Gaussian parsing '{}' gives an error: {}. ",
+                                &f.value, e,
+                            );
+                            ()
+                        }
                     },
                 }
             }
@@ -231,8 +251,8 @@ impl<T: ModelStore + Sync> Model<T> {
                                 }
                                 Err(e) => {
                                     println!(
-                                        "FeatureType::GaussianStd encountered an error: {}",
-                                        e
+                                        "FeatureType::GaussianStd parsing '{}' gives an error: {}. ",
+                                        &f.value, e,
                                     );
                                     ()
                                 }
@@ -247,7 +267,10 @@ impl<T: ModelStore + Sync> Model<T> {
                                     )
                                 }
                                 Err(e) => {
-                                    println!("FeatureType::Gaussian encountered an error: {}", e);
+                                    println!(
+                                        "FeatureType::Gaussian parsing '{}' gives an error: {}. ",
+                                        &f.value, e,
+                                    );
                                     ()
                                 }
                             },
