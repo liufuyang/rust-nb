@@ -68,7 +68,8 @@ pub struct Model<T: ModelStore + Sync> {
     regex: Regex,
     // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
-    pseudo_count: f64,
+    pseudo_count: f64, // pseudo count of words in text feature
+    prior_factor: f64, // influence of prior prob, default 1.0
 }
 
 impl<T: ModelStore + Sync> Model<T> {
@@ -95,6 +96,11 @@ impl<T: ModelStore + Sync> Model<T> {
 
     pub fn with_pseudo_count(mut self, pseudo_count: f64) -> Self {
         self.pseudo_count = pseudo_count;
+        self
+    }
+
+    pub fn with_prior_factor(mut self, prior_factor: f64) -> Self {
+        self.prior_factor = prior_factor;
         self
     }
 
@@ -223,7 +229,13 @@ impl<T: ModelStore + Sync> Model<T> {
                                         v.clone(),
                                     )
                                 }
-                                Err(_) => (),
+                                Err(e) => {
+                                    println!(
+                                        "FeatureType::GaussianStd encountered an error: {}",
+                                        e
+                                    );
+                                    ()
+                                }
                             },
                             FeatureType::Gaussian => match &f.value.parse::<f64>() {
                                 Ok(v) => {
@@ -234,12 +246,17 @@ impl<T: ModelStore + Sync> Model<T> {
                                         v.clone(),
                                     )
                                 }
-                                Err(_) => (),
+                                Err(e) => {
+                                    println!("FeatureType::Gaussian encountered an error: {}", e);
+                                    ()
+                                }
                             },
                         };
                     }
 
-                    let final_log_p = (priors_count_of_class).ln() - (total_data_count).ln() + lp;
+                    let final_log_p = self.prior_factor
+                        * ((priors_count_of_class).ln() - (total_data_count).ln())
+                        + lp;
                     result.insert(outcome.to_owned(), final_log_p);
                 }
 
@@ -554,6 +571,7 @@ impl Model<ModelHashMapStore> {
             default_gaussian_m2: 0.0,
             default_gaussian_sigma_factor: 1.0 / 6.0,
             pseudo_count: 1.0,
+            prior_factor: 1.0,
         }
     }
 }
