@@ -68,6 +68,7 @@ pub struct Model<T: ModelStore + Sync> {
     regex: Regex,
     // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
+    pseudo_count: f64,
 }
 
 impl<T: ModelStore + Sync> Model<T> {
@@ -89,6 +90,11 @@ impl<T: ModelStore + Sync> Model<T> {
 
     pub fn with_default_gaussian_m2(mut self, default_gaussian_m2: f64) -> Self {
         self.default_gaussian_m2 = default_gaussian_m2;
+        self
+    }
+
+    pub fn with_pseudo_count(mut self, pseudo_count: f64) -> Self {
+        self.pseudo_count = pseudo_count;
         self
     }
 
@@ -426,7 +432,9 @@ impl<T: ModelStore + Sync> Model<T> {
         // from Kotlin blayze code:
         // -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
         // switch the last part, google "-log(1+x**2), -(x**2)" to see difference
-        -sigma.ln() - (2.0 * PI).sqrt().ln() - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
+        -sigma.ln()
+            - (2.0 * PI).sqrt().ln()
+            - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
     }
     /// end of GaussianStd session
 
@@ -497,7 +505,9 @@ impl<T: ModelStore + Sync> Model<T> {
         // from Kotlin blayze code:
         // -ln(sigma) - ln(sqrt(2 * PI)) - (value - mu).pow(2).div(2 * sigma.pow(2))
         // switch the last part, google "-log(1+x**2), -(x**2)" to see difference
-        -sigma.ln() - (2.0 * PI).sqrt().ln() - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
+        -sigma.ln()
+            - (2.0 * PI).sqrt().ln()
+            - (1.0 + (value - mu).powi(2) / (2.0 * sigma.powi(2))).ln()
     }
     /// end of Gaussian session
 
@@ -519,6 +529,7 @@ impl<T: ModelStore + Sync> Model<T> {
             count_of_word_in_class,           // c_f_c
             count_of_all_word_in_class,       // c_c
             count_of_unique_words_in_feature, // |V|
+            self.pseudo_count,
         )
     }
 }
@@ -542,6 +553,7 @@ impl Model<ModelHashMapStore> {
             stop_words: None,
             default_gaussian_m2: 0.0,
             default_gaussian_sigma_factor: 1.0 / 6.0,
+            pseudo_count: 1.0,
         }
     }
 }
@@ -610,9 +622,7 @@ fn count<'a>(text: &'a str, stop_words: &Option<HashSet<String>>) -> HashMap<&'a
 /// c_f_c: count_of_word_in_class
 /// c_c:
 /// v: count_of_unique_words_in_feature
-fn log_prob(count: f64, c_f_c: f64, c_c: f64, v: f64) -> f64 {
-    let pseudo_count = 1.0;
-
+fn log_prob(count: f64, c_f_c: f64, c_c: f64, v: f64, pseudo_count: f64) -> f64 {
     count * ((c_f_c + pseudo_count).ln() - (c_c + v * pseudo_count).ln())
 }
 
