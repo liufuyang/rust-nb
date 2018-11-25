@@ -7,7 +7,9 @@ use std::io::BufReader;
 use rust_nb::{Feature, FeatureType, Model};
 
 fn main() {
-    let mut model = Model::new().with_stop_words_file("examples/data/english-stop-words-large.txt");
+    let mut model = Model::new()
+        .with_stop_words_file("examples/data/english-stop-words-large.txt")
+        .with_pseudo_count(0.1);
 
     let train_data = load_txt("examples/data/20newsgroup_train.txt");
     let test_data = load_txt("examples/data/20newsgroup_test.txt");
@@ -44,7 +46,7 @@ fn main() {
     let score = total_test_score / test_labels.len() as f64;
 
     println!("test score: {}", score);
-    assert!((0.6456452469463622 - score).abs() < 1e-10);
+    assert!((0.66 - score).abs() < 1e-3);
 }
 
 fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
