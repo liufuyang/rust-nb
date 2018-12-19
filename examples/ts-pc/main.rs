@@ -54,14 +54,16 @@ fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
 
     for line in f.lines() {
         let line = line.unwrap();
-        let unspsc = line.split(',').last().expect("no comma?");
-        let product_name = line.replace(unspsc, "");
+        let line_v: Vec<&str> = line.rsplitn(2, ",").collect();
+        
+        let unspsc = line_v.get(0).unwrap_or(&"UNKNOWN").to_string();
+        let product_name  = line_v.get(1).unwrap_or(&"").to_string();
 
         // print!("unspsc: {}, ", unspsc);
         // println!("product name: {}", product_name);
 
         v.push((
-            unspsc.to_owned(),
+            unspsc,
             vec![Feature {
                 feature_type: FeatureType::Text,
                 name: "product name".to_owned(),
