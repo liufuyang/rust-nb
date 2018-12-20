@@ -319,7 +319,8 @@ impl<T: ModelStore + Sync> Model<T> {
     ) {
         self.model_store.map_add(
             model_name,
-            &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
+            &["_c_f_c", feature_name, c, word].join("|"),
+            // &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
             v,
         );
 
@@ -335,7 +336,8 @@ impl<T: ModelStore + Sync> Model<T> {
     ) -> f64 {
         self.model_store.map_get(
             model_name,
-            &format!("_c_f_c|{}|{}|{}", feature_name, c, word),
+            &["_c_f_c", feature_name, c, word].join("|"),
+            // &format!("_c_f_c|{}|{}|{}", ),
         )
     }
 
@@ -347,19 +349,20 @@ impl<T: ModelStore + Sync> Model<T> {
         v: f64,
     ) {
         self.model_store
-            .map_add(model_name, &format!("_c_c|{}|{}", feature_name, c), v);
+            .map_add(model_name, &["_c_c", feature_name, c].join("|"), v); // &format!("_c_c|{}|{}", feature_name, c)
     }
 
     fn get_count_of_all_word_in_class(&self, model_name: &str, feature_name: &str, c: &str) -> f64 {
         self.model_store
-            .map_get(model_name, &format!("_c_c|{}|{}", feature_name, c))
+            .map_get(model_name, &["_c_c", feature_name, c].join("|")) // &format!("_c_c|{}|{}", feature_name, c)
     }
 
     fn add_unique_word_in_feature(&mut self, model_name: &str, feature_name: &str, word: &str) {
         if !self.is_word_appeared_in_feature(model_name, feature_name, word) {
             self.model_store.map_add(
                 model_name,
-                &format!("_Vw|{}|{}", feature_name, word), // _Vw: marker for unique word in feature
+                &["_Vw", feature_name, word].join("|"), // _Vw: marker for unique word in feature
+                // &format!("_Vw|{}|{}", feature_name, word),
                 1.0,
             );
             self.model_store
@@ -374,11 +377,12 @@ impl<T: ModelStore + Sync> Model<T> {
     ) -> bool {
         0 != self
             .model_store
-            .map_get(model_name, &format!("_Vw|{}|{}", feature_name, word)) as usize // _Vw: marker for unique word in feature
+            .map_get(model_name, &["_Vw", feature_name, word].join("|")) as usize // _Vw: marker for unique word in feature
+                                                                                  // &format!("_Vw|{}|{}", feature_name, word)
     }
     fn get_count_of_unique_words_in_feature(&self, model_name: &str, feature_name: &str) -> f64 {
         self.model_store
-            .map_get(model_name, &format!("_V|{}", feature_name))
+            .map_get(model_name, &["_V", feature_name].join("|")) // &format!("_V|{}", feature_name)
     }
 
     ///
