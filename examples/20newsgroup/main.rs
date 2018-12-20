@@ -3,10 +3,13 @@ extern crate rust_nb;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::time::Instant;
 
 use rust_nb::{Feature, FeatureType, Model};
 
 fn main() {
+    let time_start = Instant::now();
+
     let mut model = Model::new();
 
     let train_data = load_txt("examples/data/20newsgroup_train.txt");
@@ -14,17 +17,22 @@ fn main() {
     let (test_labels, test_features): (Vec<String>, Vec<Vec<Feature>>) =
         test_data.into_iter().map(|(s, v)| (s, v)).unzip();
 
+    println!("== load data elapsed:{:#?}", time_start.elapsed());
     println!(
         "Train size: {}, test size: {}",
         train_data.len(),
         test_features.len()
     );
 
+    let time_train = Instant::now();
     model.train("20newsgroup_model", &train_data);
     println!("Training finished");
+    println!("== train elapsed:{:#?}", time_train.elapsed());
 
+    let time_predicts = Instant::now();
     let predicts = model.predict_batch("20newsgroup_model", &test_features);
     println!("Testing finished");
+    println!("== predicts elapsed:{:#?}", time_predicts.elapsed());
 
     let total_test_score: f64 = test_labels
         .iter()
@@ -49,6 +57,8 @@ fn main() {
     // blayze gives           0.5770609318996416
     // pblayze gives          0.5770609318996416
     // python                 0.5779341
+
+    println!("== total elapsed:{:#?}", time_start.elapsed());
 }
 
 fn load_txt(file_name: &str) -> Vec<(String, Vec<Feature>)> {
