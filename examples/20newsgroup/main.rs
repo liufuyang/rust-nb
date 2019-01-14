@@ -13,7 +13,7 @@ fn main() {
     let mut model = Model::new();
 
     let train_data = load_txt("examples/data/20newsgroup_train.txt");
-    let test_data = load_txt100("examples/data/20newsgroup_test.txt");
+    let test_data = load_txt("examples/data/20newsgroup_test.txt");
 
     let test_data_len = test_data.len();
 
