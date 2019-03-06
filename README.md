@@ -1,5 +1,5 @@
 # rust-bn
-
+<a href="https://crates.io/crates/rust_nb"><img src="https://img.shields.io/crates/v/rust_nb.svg"></a>
 <a href="https://travis-ci.org/liufuyang/rust-nb"><img src="https://travis-ci.org/liufuyang/rust-nb.svg?branch=master"></a>
 
 A simple Naive Bayes Model in Rust. 
@@ -27,8 +27,14 @@ cargo run --example 20newsgroup_stopwords --release
 And then you can modify those examples in the `examples` folder
 and perhaps from there build your own models.
 
-Just take a quick look below, see how a simple email spam model might
-look like when you train and predict on it.
+Or you can use this package in your application by setting in Cargo.toml:
+```
+[dependencies]
+...
+rust_nb = "0.1.0"
+```
+
+Just take make a main function looks like below. See how a simple email spam model might look like when you train and predict on it.
 
 ```rust
 extern crate rust_nb;
