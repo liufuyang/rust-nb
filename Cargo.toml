@@ -1,7 +1,10 @@
 [package]
 name = "rust_nb"
+description = "A simple but generic Naive Bayes Model in Rust."
 version = "0.1.0"
+license = "MIT"
 authors = ["Fuyang Liu <liufuyang@users.noreply.github.com>"]
+repository = "https://github.com/liufuyang/rust-nb"
 edition = "2018"
 include = [
     "**/*.rs",
