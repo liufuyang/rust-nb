@@ -579,7 +579,7 @@ impl<T: ModelStore + Sync> Model<T> {
 
 // A in memory ModelStore implementation ModelHashMapStore
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ModelHashMapStore {
     map: HashMap<String, f64>,
     class_map: HashMap<String, BTreeSet<String>>, // model_name to list of class
