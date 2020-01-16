@@ -2,6 +2,7 @@ extern crate rayon;
 extern crate regex;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_regex;
 
 use rayon::prelude::*;
 use regex::Regex;
@@ -60,11 +61,13 @@ pub trait ModelStore {
     fn get_all_classes(&self, model_name: &str) -> Option<BTreeSet<String>>;
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Model<T: ModelStore + Sync> {
     // m2 init value, std at the beginning will be sqrt(default_gaussian_m2)
     default_gaussian_m2: f64,
     default_gaussian_sigma_factor: f64,
     model_store: T,
+    #[serde(with = "serde_regex")]
     regex: Regex,
     // Regex used on features, matches will be replaces by empty space. By default we use r"[^a-zA-Z]+" to replace every char not in English as space
     stop_words: Option<HashSet<String>>,
